@@ -1,0 +1,17 @@
+FROM wordpress:php8.2-apache
+
+RUN apt-get update && apt-get install -y \
+  curl \
+  less \
+  unzip \
+  mariadb-client \
+  && curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+  && chmod +x wp-cli.phar \
+  && mv wp-cli.phar /usr/local/bin/wp \
+  && apt-get clean
+
+# Install PHP-CS-Fixer
+RUN curl -L https://github.com/FriendsOfPHP/PHP-CS-Fixer/releases/download/v3.47.0/php-cs-fixer.phar -o /usr/local/bin/php-cs-fixer \
+  && chmod +x /usr/local/bin/php-cs-fixer
+
+WORKDIR /var/www/html

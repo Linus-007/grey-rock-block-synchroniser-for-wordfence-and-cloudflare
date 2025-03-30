@@ -1,0 +1,35 @@
+services:
+  wordpress:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile.wordpress
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: root
+    volumes:
+      - wordpress-core:/var/www/html
+      - ./src:/var/www/html/wp-content/plugins/wordfence-cloudflare-sync
+      - ./dev:/var/www/html/dev
+      - ./wp-config.php:/var/www/html/wp-config.php
+      - ./autologin.php:/var/www/html/wp-content/autologin.php
+      - ./setup.sh:/var/www/html/setup.sh
+      - ./.env:/var/www/html/.env
+    depends_on:
+      - db
+
+  db:
+    image: mariadb:10.6
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: wordpress
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
+  wordpress-core:

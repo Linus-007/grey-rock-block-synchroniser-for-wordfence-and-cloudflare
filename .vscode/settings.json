@@ -1,0 +1,15 @@
+{
+  "editor.tabSize": 2,
+  "files.exclude": {
+    "**/.git": true,
+    "**/vendor": true,
+  },
+  "php-cs-fixer.executablePath": "/usr/local/bin/php-cs-fixer",
+  "php-cs-fixer.config": ".php-cs-fixer.php",
+  "php-cs-fixer.formatHtml": false,
+  "php-cs-fixer.onsave": true,
+  "[php]": {
+    "editor.defaultFormatter": "junstyle.php-cs-fixer",
+    "editor.formatOnSave": true
+  }
+}

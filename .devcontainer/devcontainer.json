@@ -1,0 +1,20 @@
+{
+  "name": "WordPress Dev Stack",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "wordpress",
+  "workspaceFolder": "/var/www/html",
+  "postCreateCommand": "sh ./setup.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "php.validate.executablePath": "/usr/local/bin/php"
+      },
+      "extensions": [
+        "xdebug.php-debug",
+        "esbenp.prettier-vscode",
+        "ms-vscode.makefile-tools",
+        "junstyle.php-cs-fixer"
+      ]
+    }
+  }
+}
