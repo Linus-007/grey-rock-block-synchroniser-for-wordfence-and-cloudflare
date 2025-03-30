@@ -1,15 +1,13 @@
 <?php
 /**
- * Plugin Name; Wordfence Cloudflare Firewall Sync
+ * Plugin Name: Wordfence Cloudflare Firewall Sync
  * Description: Sync Wordfence IP blocks to Cloudflare's WAF at the DNS level
- * Version 1.0.0
+ * Version: 1.0.0
  * Author: Mike Orozco
  * Author URI: https://mikeorozco.dev
- * License: GPL2
- * Text Domain: wordfence-cloudflare-sync
  */
 
- declare(strict_types=1);
+declare(strict_types=1);
 
 if (!defined('ABSPATH')) {
     exit;
@@ -17,7 +15,7 @@ if (!defined('ABSPATH')) {
 
 spl_autoload_register(function (string $class): void {
   $prefix = 'WPCF\\FirewallSync\\';
-  $base_dir = __DIR__ . '/src/';
+  $base_dir = __DIR__ . '/includes/';
 
   if (strpos($class, $prefix) !== 0) return;
 

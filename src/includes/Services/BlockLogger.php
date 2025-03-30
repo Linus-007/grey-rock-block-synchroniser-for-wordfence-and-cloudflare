@@ -20,7 +20,7 @@ final class BlockLogger {
     $sql = "CREATE TABLE {$table_name} (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       ip VARCHAR(45) NOT NULL,
-      reason VARCHAR(255) DEFAULT 'sync'
+      reason VARCHAR(255) DEFAULT 'sync',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       expires_at DATETIME DEFAULT NULL,

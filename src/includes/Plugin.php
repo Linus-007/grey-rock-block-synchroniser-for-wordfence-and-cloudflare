@@ -4,21 +4,28 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync;
 
+use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Admin\Settings;
 use WPCF\FirewallSync\Admin\Fields;
 use WPCF\FirewallSync\Services\SyncScheduler;
 use WPCF\FirewallSync\Services\BlockLogger;
+use WPCF\FirewallSync\Services\MigrationManager;
 
 final class Plugin {
-  public const VERSION = '1.0.0';
+  public static string $VERSION;
 
-  /**
-   * Initialize the plugin
-   */
   public static function init(): void {
     self::define_constants();
     self::load_admin();
     self::load_services();
+  }
+
+  public static function get_version(): string {
+    if (!isset(self::$VERSION)) {
+      $plugin_file = plugin_dir_path(__DIR__ . '/../index.php') . 'index.php';
+      $plugin_data = get_file_data($plugin_file, ['Version' => 'Version']);
+      self::$VERSION = $plugin_data['Version'] ?? '0.0.0';
+    }
   }
 
   private static function define_constants(): void {
@@ -31,7 +38,7 @@ final class Plugin {
     }
 
     if (!defined('WPCF_FS_PLUGIN_URL')) {
-      define('WPCF_FS_PLUGIN_URL', plugin_dir_url(__DIR . '/../index.php'));
+      define('WPCF_FS_PLUGIN_URL', plugin_dir_url(__DIR__ . '/../index.php'));
     }
   }
 
@@ -50,10 +57,24 @@ final class Plugin {
   public static function activate(): void {
     self::define_constants();
 
-    BlockLogger::create_table();
+    $stored_version = get_option('firewall_sync_version');
+
+    if ($stored_version === false) {
+      BlockLogger::create_table();
+    }
+
+    if ($stored_version !== self::get_version()) {
+      MigrationManager::run($stored_version);
+      update_option('firewall_sync_version', self::get_version());
+    }
+
     SyncScheduler::run_now();
 
     $options = get_option('firewall_sync_options');
+
+    if (!isset($options['cloudflare_api_token']) || !isset($options['cloudflare_zone_id'])) {
+      return;
+    }
 
     $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
 
@@ -63,9 +84,20 @@ final class Plugin {
 
   public static function deactivate(): void {
     $options = get_option('firewall_sync_options');
+
+    if (!isset($options['cloudflare_api_token']) || !isset($options['cloudflare_zone_id'])) {
+      return;
+    }
+
     $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
 
     SyncScheduler::cleanup_expired($client);
     SyncScheduler::deactivate();
+  }
+
+  public static function run_migrations(?string $from_version): void {
+    if ($from_version === null || version_compare($from_version, '1.0.0', '<')) {
+      // Future migration logic here...
+    }
   }
 }
