@@ -1,0 +1,32 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Create Release Zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Create plugin zip
+        run: |
+          cd src
+          zip -r ../wordfence-cloudflare-firewall-sync.zip . -x '*.DS_Store' '__MACOSX'
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: wordfence-cloudflare-firewall-sync.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
