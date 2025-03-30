@@ -15,6 +15,7 @@ final class Plugin {
   public static string $VERSION;
 
   public static function init(): void {
+    self::get_version();
     self::define_constants();
     self::load_admin();
     self::load_services();
@@ -26,11 +27,13 @@ final class Plugin {
       $plugin_data = get_file_data($plugin_file, ['Version' => 'Version']);
       self::$VERSION = $plugin_data['Version'] ?? '0.0.0';
     }
+
+    return self::$VERSION;
   }
 
   private static function define_constants(): void {
     if (!defined('WPCF_FS_VERSION')) {
-      define('WPCF_FS_VERSION', self::VERSION);
+      define('WPCF_FS_VERSION', self::$VERSION);
     }
 
     if (!defined('WPCF_FS_PLUGIN_DIR')) {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync\Services;
 
 use wpdb;
-use \WPCF\FirewallSync\Plugin;
+use WPCF\FirewallSync\Plugin;
 
 final class MigrationManager {
   public static function run(?string $from_version): void {

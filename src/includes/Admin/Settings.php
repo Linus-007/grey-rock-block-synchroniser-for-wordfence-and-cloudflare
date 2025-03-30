@@ -63,6 +63,12 @@ final class Settings {
             <?php submit_button('Run Cleanup Now', 'secondary', 'firewall_sync_cleanup_now', false); ?>
           </form>
 
+          <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 10px;">
+            <?php wp_nonce_field('firewall_sync_reconcile', 'firewall_sync_reconcile_nonce'); ?>
+            <input type="hidden" name="action" value="firewall_sync_reconcile">
+            <?php submit_button('Run Reconciliation', 'secondary', 'firewall_sync_reconcile', false); ?>
+          </form>
+
           <details style="margin-top: 20px;">
             <summary style="font-size: 1.2em; cursor: pointer;">
               <?php esc_html_e('View Block Log', 'firewall-sync'); ?>
@@ -71,6 +77,30 @@ final class Settings {
               <?php $log_table->display(); ?>
             </div>
           </details>
+
+          <?php if ($result = get_transient('firewall_sync_reconcile_result')) {
+            delete_transient('firewall_sync_reconcile_result');
+
+            echo '<h2>Reconciliation Results</h2>';
+
+            echo '<h3>Missing in Cloudflare (in log but not in CF)</h3>';
+            echo '<ul>';
+
+            foreach ($result['missing_in_cf'] as $ip) {
+                echo '<li>' . esc_html($ip) . '</li>';
+            }
+
+            echo '</ul>';
+
+            echo '<h3>Orphaned in Cloudflare (in CF but not in log)</h3>';
+            echo '<ul>';
+
+            foreach ($result['orphaned_in_cf'] as $ip) {
+                echo '<li>' . esc_html($ip) . '</li>';
+            }
+
+            echo '</ul>';
+          } ?>
         </div>
       <?php
     }

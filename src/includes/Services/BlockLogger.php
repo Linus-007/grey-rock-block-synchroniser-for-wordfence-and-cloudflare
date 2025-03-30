@@ -80,4 +80,12 @@ final class BlockLogger {
 
     return (int) $result > 0;
   }
+
+  public static function get_all_ips(): array {
+    global $wpdb;
+
+    $table = $wpdb->prefix . self::TABLE;
+
+    return $wpdb->get_col("SELECT ip FROM {$table}");
+  }
 }

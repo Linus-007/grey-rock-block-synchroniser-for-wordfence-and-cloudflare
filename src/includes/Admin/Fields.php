@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync\Admin;
 
 use WPCF\FirewallSync\Cloudflare\Client;
-use \WPCF\FirewallSync\Services\SyncScheduler;
+use WPCF\FirewallSync\Services\SyncScheduler;
+use WPCF\FirewallSync\Services\Reconciler;
 
 final class Fields {
   public static function register(): void {
@@ -15,6 +16,7 @@ final class Fields {
     add_action('update_option_firewall_sync_options', [self::class, 'maybe_handle_manual_block'], 10, 2);
     add_action('admin_post_firewall_sync_now', [self::class, 'handle_sync_now']);
     add_action('admin_post_firewall_sync_cleanup_now', [self::class, 'handle_cleanup_now']);
+    add_action('admin_post_firewall_sync_reconcile', [self::class, 'handle_reconcile']);
   }
 
   public static function register_settings(): void {
@@ -57,47 +59,6 @@ final class Fields {
       'firewall-sync-settings',
       'firewall_sync_main_section'
     );
-  }
-
-  public static function handle_sync_now(): void {
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-
-    check_admin_referer('firewall_sync_now', 'firewall_sync_now_nonce');
-
-    $success = SyncScheduler::run_now();
-
-    add_settings_error(
-        'firewall_sync_messages',
-        'sync_now',
-        $success ? 'Sync completed successfully.' : 'Sync failed.',
-        $success ? 'updated' : 'error'
-    );
-
-    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
-    exit;
-  }
-
-  public static function handle_cleanup_now(): void {
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
-    }
-
-    check_admin_referer('firewall_sync_cleanup_now', 'firewall_sync_cleanup_now_nonce');
-
-    $options = get_option('firewall_sync_options');
-    $client = new Client(
-        $options['cloudflare_api_token'] ?? '',
-        $options['cloudflare_zone_id'] ?? ''
-    );
-
-    SyncScheduler::cleanup_expired($client);
-
-    add_settings_error('firewall_sync_messages', 'cleanup_now', 'Cleanup completed successfully.', 'updated');
-    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
-
-    exit;
   }
 
   private static function add_button_field(string $name, string $label): void {
@@ -178,6 +139,67 @@ final class Fields {
       : 'Failed to create or delete test block';
 
     add_settings_error('firewall_sync_messages', 'test', $msg, $create && $delete ? 'updated' : 'error');
+    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
+    exit;
+  }
+
+  public static function handle_sync_now(): void {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+
+    check_admin_referer('firewall_sync_now', 'firewall_sync_now_nonce');
+
+    $success = SyncScheduler::run_now();
+
+    add_settings_error(
+        'firewall_sync_messages',
+        'sync_now',
+        $success ? 'Sync completed successfully.' : 'Sync failed.',
+        $success ? 'updated' : 'error'
+    );
+
+    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
+    exit;
+  }
+
+  public static function handle_cleanup_now(): void {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+
+    check_admin_referer('firewall_sync_cleanup_now', 'firewall_sync_cleanup_now_nonce');
+
+    $options = get_option('firewall_sync_options');
+    $client = new Client(
+        $options['cloudflare_api_token'] ?? '',
+        $options['cloudflare_zone_id'] ?? ''
+    );
+
+    SyncScheduler::cleanup_expired($client);
+
+    add_settings_error('firewall_sync_messages', 'cleanup_now', 'Cleanup completed successfully.', 'updated');
+    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
+
+    exit;
+  }
+
+  public static function handle_reconcile(): void {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+
+    check_admin_referer('firewall_sync_reconcile', 'firewall_sync_reconcile_nonce');
+
+    $options = get_option('firewall_sync_options');
+    $client = new Client(
+        $options['cloudflare_api_token'] ?? '',
+        $options['cloudflare_zone_id'] ?? ''
+    );
+
+    $result = Reconciler::run($client);
+    set_transient('firewall_sync_reconcile_result', $result, 60);
+
     wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
     exit;
   }

@@ -87,4 +87,34 @@ final class Client {
       'headers' => $headers,
     ];
   }
+
+  public function get_current_blocked_ips(): array {
+    $ip_list = [];
+    $page = 1;
+
+    do {
+      $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&page={$page}&per_page=50";
+
+      $response = wp_remote_get($url, $this->get_headers());
+
+      if (is_wp_error($response)) {
+        break;
+      }
+
+      $body = json_decode(wp_remote_retrieve_body($response), true);
+      $result = $body['result'] ?? [];
+
+      foreach ($rules as $rule) {
+        if (($rule['configuration']['target'] ?? '') === 'ip') {
+          $ip_list[] = $rule['configuration']['value'];
+        }
+      }
+
+      $has_more = ($body['result_info']['total_pages'] ?? 1) > $page;
+      
+      $page += 1;
+    } while ($has_more);
+
+    return array_unique($ip_list);
+  }
 }
