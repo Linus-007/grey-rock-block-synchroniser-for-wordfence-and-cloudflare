@@ -13,11 +13,11 @@ services:
     volumes:
       - wordpress-core:/var/www/html
       - ./src:/var/www/html/wp-content/plugins/wordfence-cloudflare-sync
-      - ./dev:/var/www/html/dev
       - ./wp-config.php:/var/www/html/wp-config.php
       - ./autologin.php:/var/www/html/wp-content/autologin.php
       - ./setup.sh:/var/www/html/setup.sh
       - ./.env:/var/www/html/.env
+      - ./README.md:/var/www/html/wp-content/wordfence-cloudflare-sync/README.txt
     depends_on:
       - db
 

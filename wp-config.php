@@ -30,17 +30,4 @@ if (! defined('ABSPATH')) {
   define('ABSPATH', __DIR__ . '/');
 }
 
-$envPath = __DIR__ . '/.env';
-if (file_exists($envPath)) {
-  foreach (file($envPath) as $line) {
-    if (strpos(trim($line), 'ENABLE_DEV_TOOLS=') === 0) {
-      define('ENABLE_DEV_TOOLS', trim(explode('=', $line, 2)[1]) === 'true');
-    }
-  }
-}
-
-if (!defined('ENABLE_DEV_TOOLS')) {
-  define('ENABLE_DEV_TOOLS', false);
-}
-
 require_once ABSPATH . 'wp-settings.php';
