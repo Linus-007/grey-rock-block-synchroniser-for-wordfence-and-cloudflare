@@ -18,6 +18,7 @@ final class Fields {
     add_action('admin_post_firewall_sync_now', [self::class, 'handle_sync_now']);
     add_action('admin_post_firewall_sync_cleanup_now', [self::class, 'handle_cleanup_now']);
     add_action('admin_post_firewall_sync_reconcile', [self::class, 'handle_reconcile']);
+    add_action('admin_post_firewall_sync_manual_block', [self::class, 'handle_manual_block']);
   }
 
   public static function register_settings(): void {
@@ -34,10 +35,9 @@ final class Fields {
       'firewall-sync-settings',
     );
 
-    self::add_text_field('cloudflare_api_token', 'Cloudflare API Token');
+    self::add_text_field('cloudflare_api_token', 'Cloudflare API Token', '');
     self::add_text_field('cloudflare_zone_id', __('Cloudflare Zone ID', Plugin::get_text_domain()));
     self::add_text_field('sync_interval', __('Sync Interval (minutes)', Plugin::get_text_domain()), 'e.g., 15, 30, 60');
-    self::add_text_field('manual_block_ip', __('Manually Block IP', Plugin::get_text_domain()));
     self::add_button_field('validate_cf_credentials', __('Validate Cloudflare Credentials', Plugin::get_text_domain()));
     self::add_button_field('test_block', __('Run Test Block', Plugin::get_text_domain()));
   }
@@ -56,6 +56,34 @@ final class Fields {
           esc_attr($value),
           esc_attr($placeholder)
         );
+
+        if ($name === 'cloudflare_api_token') {
+          echo '<p class="description">';
+
+          echo sprintf(
+            esc_html__(
+                'Need help generating your token? %1$sFollow the Cloudflare documentation%2$s.',
+                Plugin::get_text_domain()
+            ),
+            '<a href="https://developers.cloudflare.com/cloudflare-one/api-terraform/scoped-api-tokens/" target="_blank" rel="noopener noreferrer">',
+            '</a>'
+          );
+
+          echo '</p>';
+        } else if ($name === 'cloudflare_zone_id') {
+          echo '<p class="description">';
+
+          echo sprintf(
+            esc_html__(
+                'Need help finding your zone ID? %1$sFollow the Cloudflare documentation%2$s.',
+                Plugin::get_text_domain()
+            ),
+            '<a href="https://developers.cloudflare.com/fundamentals/setup/find-account-and-zone-ids/" target="_blank" rel="noopener noreferrer">',
+            '</a>'
+          );
+
+          echo '</p>';
+        }
       },
       'firewall-sync-settings',
       'firewall_sync_main_section'
@@ -214,6 +242,40 @@ final class Fields {
     set_transient('firewall_sync_reconcile_result', $result, 60);
 
     wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
+    exit;
+  }
+
+  public static function handle_manual_block(): void {
+    if (!current_user_can('manage_options')) {
+      wp_die('Unauthorized');
+    }
+
+    check_admin_referer('firewall_sync_manual_block', 'firewall_sync_manual_block_nonce');
+
+    $ip = $_POST['manual_ip'] ?? '';
+    $reason = $_POST['manual_reason'] ?? 'manual';
+
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+      add_settings_error('firewall_sync_manual_block', 'invalid_ip', __('Invalid IP address.', Plugin::get_text_domain()), 'error');
+      wp_redirect(admin_url('admin.php?page=firewall-sync-manual'));
+      exit;
+    }
+
+    $options = get_option('firewall_sync_options');
+    $client = new \WPCF\FirewallSync\Cloudflare\Client(
+      $options['cloudflare_api_token'] ?? '',
+      $options['cloudflare_zone_id'] ?? ''
+    );
+    $success = $client->create_test_block($ip);
+
+    if ($success) {
+      BlockLogger::log($ip, 'manual: ' . $reason);
+      add_settings_error('firewall_sync_manual_block', 'success', __('IP blocked successfully.', Plugin::get_text_domain()), 'updated');
+    } else {
+      add_settings_error('firewall_sync_manual_block', 'fail', __('Failed to block IP.', Plugin::get_text_domain()), 'error');
+    }
+
+    wp_redirect(admin_url('admin.php?page=firewall-sync-manual'));
     exit;
   }
 }
