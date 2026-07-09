@@ -135,8 +135,17 @@ final class Fields {
     $options = get_option('firewall_sync_options');
 
     $client = new Client($options['cloudflare_api_token'] ?? '', $options['cloudflare_zone_id'] ?? '');
+    $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
 
-    $result = $client->validate();
+    if ($mode === 'account_list') {
+      $result = $client->validate_account_list(
+        $options['cloudflare_account_id'] ?? '',
+        $options['cloudflare_list_id'] ?? ''
+      );
+    } else {
+      $result = $client->validate();
+    }
+
     $msg = $result
       ? __('Cloudflare credentials validated successfully', Plugin::get_text_domain())
       : __('Failed to validate Cloudflare credentials', Plugin::get_text_domain());
