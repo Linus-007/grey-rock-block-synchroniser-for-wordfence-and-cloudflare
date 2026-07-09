@@ -245,7 +245,7 @@ final class Fields {
         $options['cloudflare_zone_id'] ?? ''
     );
 
-    $result = Reconciler::run($client);
+    $result = Reconciler::run($client, $options);
     set_transient('firewall_sync_reconcile_result', $result, 60);
 
     wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));

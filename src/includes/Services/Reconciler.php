@@ -6,8 +6,18 @@ use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Services\BlockLogger;
 
 final class Reconciler {
-  public static function run(Client $client): array {
-    $cf_ips = $client->get_current_blocked_ips();
+  public static function run(Client $client, array $options = []): array {
+    $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
+
+    if ($mode === 'account_list') {
+      $cf_ips = $client->get_current_account_list_ips(
+        $options['cloudflare_account_id'] ?? '',
+        $options['cloudflare_list_id'] ?? ''
+      );
+    } else {
+      $cf_ips = $client->get_current_blocked_ips();
+    }
+
     $log_ips = BlockLogger::get_all_ips();
     $cf_set = array_flip($cf_ips);
     $log_set = array_flip($log_ips);
