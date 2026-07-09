@@ -52,7 +52,7 @@ final class Client {
   }
 
   public function delete_block(string $ip): bool {
-    $list_url = $this->apiBase . "/zones{$this->zone}/firewall/access_rules/rules?mode=block&configuration.target=ip&configuration.value={$ip}";
+    $list_url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&configuration.target=ip&configuration.value={$ip}";
     $list = wp_remote_get($list_url, $this->get_headers());
 
     if (is_wp_error($list)) {
@@ -105,7 +105,7 @@ final class Client {
       $body = json_decode(wp_remote_retrieve_body($response), true);
       $result = $body['result'] ?? [];
 
-      foreach ($rules as $rule) {
+      foreach ($result as $rule) {
         if (($rule['configuration']['target'] ?? '') === 'ip') {
           $ip_list[] = $rule['configuration']['value'];
         }
@@ -155,7 +155,7 @@ final class Client {
         continue;
       }
 
-      $body = json_decode(wp_remote_retrieve_body($response, true));
+      $body = json_decode(wp_remote_retrieve_body($response), true);
 
       if (!isset($body['result']) || !is_array($body['result'])) {
         error_log('Cloudflare batch block: Unexpected response format');
