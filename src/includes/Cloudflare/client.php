@@ -80,25 +80,33 @@ final class Client {
       return null;
     }
 
-    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
-    $response = wp_remote_get($url, $this->get_request_args());
+    $page = 1;
 
-    if (is_wp_error($response)) {
-      return null;
-    }
+    do {
+      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items?page={$page}&per_page=50";
+      $response = wp_remote_get($url, $this->get_request_args());
 
-    if (wp_remote_retrieve_response_code($response) !== 200) {
-      return null;
-    }
-
-    $body = json_decode(wp_remote_retrieve_body($response), true);
-    $items = $body['result'] ?? [];
-
-    foreach ($items as $item) {
-      if (($item['ip'] ?? '') === $ip) {
-        return $item['id'] ?? null;
+      if (is_wp_error($response)) {
+        return null;
       }
-    }
+
+      if (wp_remote_retrieve_response_code($response) !== 200) {
+        return null;
+      }
+
+      $body = json_decode(wp_remote_retrieve_body($response), true);
+      $items = $body['result'] ?? [];
+
+      foreach ($items as $item) {
+        if (($item['ip'] ?? '') === $ip) {
+          return $item['id'] ?? null;
+        }
+      }
+
+      $has_more = ($body['result_info']['total_pages'] ?? 1) > $page;
+      $page++;
+
+    } while ($has_more);
 
     return null;
   }
