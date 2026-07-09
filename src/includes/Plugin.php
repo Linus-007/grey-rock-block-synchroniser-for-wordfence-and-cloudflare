@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync;
 
-use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Admin\Settings;
 use WPCF\FirewallSync\Admin\Fields;
 use WPCF\FirewallSync\Services\SyncScheduler;
@@ -72,7 +71,6 @@ final class Plugin {
 
   private static function load_services(): void {
     SyncScheduler::register();
-    BlockLogger::create_table();
   }
 
   public static function activate(): void {
@@ -101,30 +99,10 @@ final class Plugin {
       update_option('firewall_sync_version', self::get_version());
     }
 
-    SyncScheduler::run_now();
-
-    $options = get_option('firewall_sync_options');
-
-    if (!isset($options['cloudflare_api_token']) || !isset($options['cloudflare_zone_id'])) {
-      return;
-    }
-
-    $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
-
-    SyncScheduler::cleanup_expired($client);
     SyncScheduler::register();
   }
 
   public static function deactivate(): void {
-    $options = get_option('firewall_sync_options');
-
-    if (!isset($options['cloudflare_api_token']) || !isset($options['cloudflare_zone_id'])) {
-      return;
-    }
-
-    $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
-
-    SyncScheduler::cleanup_expired($client);
     SyncScheduler::deactivate();
   }
 }
