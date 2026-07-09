@@ -164,10 +164,27 @@ final class Fields {
 
     $options = get_option('firewall_sync_options');
     $client = new Client($options['cloudflare_api_token'] ?? '', $options['cloudflare_zone_id'] ?? '');
+    $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
     $ip = sanitize_text_field($_POST['firewall_sync_options']['manual_block_ip'] ?? '');
 
-    $create = $client->create_block($ip);
-    $delete = $create ? $client->delete_block($ip) : false;
+    if ($mode === 'account_list') {
+      $create = $client->add_ip_to_account_list(
+        $options['cloudflare_account_id'] ?? '',
+        $options['cloudflare_list_id'] ?? '',
+        $ip,
+        'Wordfence Cloudflare Sync test block'
+      );
+      $delete = $create
+        ? $client->remove_ip_from_account_list(
+          $options['cloudflare_account_id'] ?? '',
+          $options['cloudflare_list_id'] ?? '',
+          $ip
+        )
+        : false;
+    } else {
+      $create = $client->create_block($ip);
+      $delete = $create ? $client->delete_block($ip) : false;
+    }
 
     $msg = ($create && $delete)
       ? 'Test block created and deleted successfully'
