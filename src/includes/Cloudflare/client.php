@@ -125,6 +125,42 @@ final class Client {
     return $code >= 200 && $code < 300;
   }
 
+  public function get_current_account_list_ips(string $account_id, string $list_id): array {
+    if ($account_id === '' || $list_id === '') {
+      return [];
+    }
+
+    $ip_list = [];
+    $page = 1;
+
+    do {
+      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items?page={$page}&per_page=50";
+      $response = wp_remote_get($url, $this->get_request_args());
+
+      if (is_wp_error($response)) {
+        break;
+      }
+
+      if (wp_remote_retrieve_response_code($response) !== 200) {
+        break;
+      }
+
+      $body = json_decode(wp_remote_retrieve_body($response), true);
+      $items = $body['result'] ?? [];
+
+      foreach ($items as $item) {
+        if (!empty($item['ip'])) {
+          $ip_list[] = $item['ip'];
+        }
+      }
+
+      $has_more = ($body['result_info']['total_pages'] ?? 1) > $page;
+      $page += 1;
+    } while ($has_more);
+
+    return array_unique($ip_list);
+  }
+
   public function create_block(string $ip): bool {
     $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules";
 
