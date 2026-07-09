@@ -20,7 +20,7 @@ final class Client {
 
   public function validate(): bool {
     $url = $this->apiBase . "/zones/{$this->zone}";
-    $response = wp_remote_get($url, $this->get_headers());
+    $response = wp_remote_get($url, $this->get_request_args());
 
     if (is_wp_error($response)) {
       return false;
@@ -44,7 +44,7 @@ final class Client {
     ];
 
     $response = wp_remote_post($url, [
-      'headers' => $this->get_headers(),
+      'headers' => $this->get_headers(true),
       'body' => json_encode($data),
     ]);
 
@@ -53,7 +53,7 @@ final class Client {
 
   public function delete_block(string $ip): bool {
     $list_url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&configuration.target=ip&configuration.value={$ip}";
-    $list = wp_remote_get($list_url, $this->get_headers());
+    $list = wp_remote_get($list_url, $this->get_request_args());
 
     if (is_wp_error($list)) {
       return false;
@@ -69,7 +69,7 @@ final class Client {
     $delete_url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules/{$rule_id}";
     $response = wp_remote_request($delete_url, [
       'method' => 'DELETE',
-      'headers' => $this->get_headers(),
+      'headers' => $this->get_headers(true),
     ]);
 
     return !is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200;
@@ -84,8 +84,12 @@ final class Client {
       $headers['Content-Type'] = 'application/json';
     }
 
+    return $headers;
+  }
+
+  private function get_request_args(bool $with_content_type = false): array {
     return [
-      'headers' => $headers,
+      'headers' => $this->get_headers($with_content_type),
     ];
   }
 
@@ -96,7 +100,7 @@ final class Client {
     do {
       $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&page={$page}&per_page=50";
 
-      $response = wp_remote_get($url, $this->get_headers());
+      $response = wp_remote_get($url, $this->get_request_args());
 
       if (is_wp_error($response)) {
         break;
