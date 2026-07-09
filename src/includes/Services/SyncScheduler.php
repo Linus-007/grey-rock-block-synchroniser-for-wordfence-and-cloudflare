@@ -83,12 +83,9 @@ final class SyncScheduler {
       if (
         !$ip ||
         (!$is_permanent && time() > $expiration) ||
-        BlockLogger::has_synced($ip)
+        BlockLogger::has_synced($ip) ||
+        BlockLogger::is_blacklisted($ip)
       ) {
-        continue;
-      }
-
-      if (BlockLogger::has_synced($ip) || BlockLogger::is_blacklisted($ip)) {
         continue;
       }
 
