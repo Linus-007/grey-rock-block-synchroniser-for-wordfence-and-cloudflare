@@ -21,37 +21,64 @@ final class Client {
    */
   private array $accountListItemCache = [];
 
+  /**
+   * Most recent Cloudflare or local validation error.
+   *
+   * @var array{operation: string, message: string, http_code: int|null}|null
+   */
+  private ?array $lastError = null;
+
   public function __construct(string $token, string $zone) {
     $this->token = $token;
     $this->zone = $zone;
   }
 
   public function validate(): bool {
+    if ($this->zone === '') {
+      return $this->fail(
+        'validate_zone',
+        __('Cloudflare Zone ID is required.', Plugin::get_text_domain())
+      );
+    }
+
     $url = $this->apiBase . "/zones/{$this->zone}";
     $response = wp_remote_get($url, $this->get_request_args());
 
-    if (is_wp_error($response)) {
-      return false;
-    }
-
-    $code = wp_remote_retrieve_response_code($response);
-
-    return $code === 200;
+    return $this->response_succeeded(
+      'validate_zone',
+      $response,
+      [200]
+    );
   }
 
-  public function validate_account_list(string $account_id, string $list_id): bool {
-    if ($account_id === '' || $list_id === '') {
-      return false;
+  public function validate_account_list(
+    string $account_id,
+    string $list_id
+  ): bool {
+    if ($account_id === '') {
+      return $this->fail(
+        'validate_account_list',
+        __('Cloudflare Account ID is required.', Plugin::get_text_domain())
+      );
     }
 
-    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}";
+    if ($list_id === '') {
+      return $this->fail(
+        'validate_account_list',
+        __('Cloudflare List ID is required.', Plugin::get_text_domain())
+      );
+    }
+
+    $url = $this->apiBase
+      . "/accounts/{$account_id}/rules/lists/{$list_id}";
+
     $response = wp_remote_get($url, $this->get_request_args());
 
-    if (is_wp_error($response)) {
-      return false;
-    }
-
-    return wp_remote_retrieve_response_code($response) === 200;
+    return $this->response_succeeded(
+      'validate_account_list',
+      $response,
+      [200]
+    );
   }
 
   /**
@@ -108,6 +135,8 @@ final class Client {
     }
 
     if (array_key_exists($ip, $items)) {
+      $this->clear_last_error();
+
       return true;
     }
 
@@ -238,6 +267,8 @@ final class Client {
     }
 
     if (!array_key_exists($ip, $items)) {
+      $this->clear_last_error();
+
       return true;
     }
 
@@ -260,6 +291,8 @@ final class Client {
       }
 
       if (!array_key_exists($ip, $items)) {
+        $this->clear_last_error();
+
         return true;
       }
 
@@ -281,12 +314,10 @@ final class Client {
       ]
     );
 
-    if (is_wp_error($response)) {
-      return false;
-    }
-
-    $code = wp_remote_retrieve_response_code($response);
-    $deleted = $code >= 200 && $code < 300;
+    $deleted = $this->response_succeeded(
+      'remove_account_list_item',
+      $response
+    );
 
     if ($deleted) {
       $cache_key = $this->account_list_cache_key(
@@ -341,13 +372,10 @@ final class Client {
       ]
     );
 
-    if (is_wp_error($response)) {
-      return false;
-    }
-
-    $code = wp_remote_retrieve_response_code($response);
-
-    return $code >= 200 && $code < 300;
+    return $this->response_succeeded(
+      'add_account_list_item',
+      $response
+    );
   }
 
   /**
@@ -387,11 +415,13 @@ final class Client {
         $this->get_request_args()
       );
 
-      if (is_wp_error($response)) {
-        return null;
-      }
-
-      if (wp_remote_retrieve_response_code($response) !== 200) {
+      if (
+        !$this->response_succeeded(
+          'read_account_list',
+          $response,
+          [200]
+        )
+      ) {
         return null;
       }
 
@@ -405,6 +435,14 @@ final class Client {
         || !isset($body['result'])
         || !is_array($body['result'])
       ) {
+        $this->fail(
+          'read_account_list',
+          __(
+            'Cloudflare returned an invalid account-list response.',
+            Plugin::get_text_domain()
+          )
+        );
+
         return null;
       }
 
@@ -451,8 +489,26 @@ final class Client {
     );
   }
 
-  public function create_block(string $ip, string $notes = ''): bool {
-    $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules";
+  public function create_block(
+    string $ip,
+    string $notes = ''
+  ): bool {
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+      return $this->fail(
+        'create_zone_access_rule',
+        __('Invalid IP address.', Plugin::get_text_domain())
+      );
+    }
+
+    if ($this->zone === '') {
+      return $this->fail(
+        'create_zone_access_rule',
+        __('Cloudflare Zone ID is required.', Plugin::get_text_domain())
+      );
+    }
+
+    $url = $this->apiBase
+      . "/zones/{$this->zone}/firewall/access_rules/rules";
 
     $data = [
       'mode' => 'block',
@@ -460,39 +516,245 @@ final class Client {
         'target' => 'ip',
         'value' => $ip,
       ],
-      'notes' => $notes !== '' ? $notes : __('Wordfence Sync Block', Plugin::get_text_domain()),
+      'notes' => $notes !== ''
+        ? $notes
+        : __(
+          'Wordfence Sync Block',
+          Plugin::get_text_domain()
+        ),
     ];
 
-    $response = wp_remote_post($url, [
-      'headers' => $this->get_headers(true),
-      'body' => json_encode($data),
-    ]);
+    $response = wp_remote_post(
+      $url,
+      [
+        'headers' => $this->get_headers(true),
+        'body' => wp_json_encode($data),
+      ]
+    );
 
-    return !is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200;
+    return $this->response_succeeded(
+      'create_zone_access_rule',
+      $response
+    );
   }
 
   public function delete_block(string $ip): bool {
-    $list_url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&configuration.target=ip&configuration.value={$ip}";
-    $list = wp_remote_get($list_url, $this->get_request_args());
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+      return $this->fail(
+        'delete_zone_access_rule',
+        __('Invalid IP address.', Plugin::get_text_domain())
+      );
+    }
 
-    if (is_wp_error($list)) {
+    if ($this->zone === '') {
+      return $this->fail(
+        'delete_zone_access_rule',
+        __('Cloudflare Zone ID is required.', Plugin::get_text_domain())
+      );
+    }
+
+    $encoded_ip = rawurlencode($ip);
+
+    $list_url = $this->apiBase
+      . "/zones/{$this->zone}/firewall/access_rules/rules"
+      . "?mode=block"
+      . "&configuration.target=ip"
+      . "&configuration.value={$encoded_ip}";
+
+    $list = wp_remote_get(
+      $list_url,
+      $this->get_request_args()
+    );
+
+    if (
+      !$this->response_succeeded(
+        'find_zone_access_rule',
+        $list,
+        [200]
+      )
+    ) {
       return false;
     }
 
-    $body = json_decode(wp_remote_retrieve_body($list), true);
+    $body = json_decode(
+      wp_remote_retrieve_body($list),
+      true
+    );
+
+    if (!is_array($body) || !isset($body['result'])) {
+      return $this->fail(
+        'find_zone_access_rule',
+        __(
+          'Cloudflare returned an invalid access-rule response.',
+          Plugin::get_text_domain()
+        )
+      );
+    }
+
     $rule_id = $body['result'][0]['id'] ?? null;
 
+    /*
+     * The desired final state has already been reached.
+     */
     if (!$rule_id) {
-      return false;
+      $this->clear_last_error();
+
+      return true;
     }
 
-    $delete_url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules/{$rule_id}";
-    $response = wp_remote_request($delete_url, [
-      'method' => 'DELETE',
-      'headers' => $this->get_headers(true),
-    ]);
+    $delete_url = $this->apiBase
+      . "/zones/{$this->zone}/firewall/access_rules/rules/{$rule_id}";
 
-    return !is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200;
+    $response = wp_remote_request(
+      $delete_url,
+      [
+        'method' => 'DELETE',
+        'headers' => $this->get_headers(true),
+      ]
+    );
+
+    return $this->response_succeeded(
+      'delete_zone_access_rule',
+      $response
+    );
+  }
+
+  public function clear_last_error(): void {
+    $this->lastError = null;
+  }
+
+  public function get_last_error_message(): string {
+    if ($this->lastError === null) {
+      return '';
+    }
+
+    $operation = str_replace(
+      '_',
+      ' ',
+      $this->lastError['operation']
+    );
+
+    $message = sprintf(
+      /* translators: 1: Cloudflare operation, 2: error message */
+      __('Cloudflare %1$s failed: %2$s', Plugin::get_text_domain()),
+      $operation,
+      $this->lastError['message']
+    );
+
+    if ($this->lastError['http_code'] !== null) {
+      $message .= sprintf(
+        /* translators: %d: HTTP response code */
+        __(' (HTTP %d)', Plugin::get_text_domain()),
+        $this->lastError['http_code']
+      );
+    }
+
+    return $message;
+  }
+
+  /**
+   * Store a local validation or Cloudflare error.
+   */
+  private function fail(
+    string $operation,
+    string $message,
+    ?int $http_code = null
+  ): bool {
+    $this->lastError = [
+      'operation' => $operation,
+      'message' => $message,
+      'http_code' => $http_code,
+    ];
+
+    return false;
+  }
+
+  /**
+   * Validate a WordPress HTTP API response and retain useful diagnostics.
+   *
+   * @param mixed $response
+   * @param array<int, int>|null $expected_codes
+   */
+  private function response_succeeded(
+    string $operation,
+    $response,
+    ?array $expected_codes = null
+  ): bool {
+    if (is_wp_error($response)) {
+      return $this->fail(
+        $operation,
+        $response->get_error_message()
+      );
+    }
+
+    $http_code = wp_remote_retrieve_response_code($response);
+    $successful = $expected_codes !== null
+      ? in_array($http_code, $expected_codes, true)
+      : ($http_code >= 200 && $http_code < 300);
+
+    if ($successful) {
+      $this->clear_last_error();
+
+      return true;
+    }
+
+    $body = json_decode(
+      wp_remote_retrieve_body($response),
+      true
+    );
+
+    $message = '';
+
+    if (is_array($body)) {
+      $errors = $body['errors'] ?? [];
+
+      if (
+        is_array($errors)
+        && isset($errors[0])
+        && is_array($errors[0])
+      ) {
+        $cloudflare_code = isset($errors[0]['code'])
+          ? (string) $errors[0]['code']
+          : '';
+
+        $cloudflare_message = isset($errors[0]['message'])
+          ? (string) $errors[0]['message']
+          : '';
+
+        if ($cloudflare_code !== '' && $cloudflare_message !== '') {
+          $message = sprintf(
+            'Cloudflare error %s: %s',
+            $cloudflare_code,
+            $cloudflare_message
+          );
+        } elseif ($cloudflare_message !== '') {
+          $message = $cloudflare_message;
+        }
+      }
+
+      if ($message === '' && !empty($body['message'])) {
+        $message = (string) $body['message'];
+      }
+    }
+
+    if ($message === '') {
+      $response_message = wp_remote_retrieve_response_message(
+        $response
+      );
+
+      $message = $response_message !== ''
+        ? $response_message
+        : __(
+          'Cloudflare returned an unsuccessful response.',
+          Plugin::get_text_domain()
+        );
+    }
+
+    return $this->fail(
+      $operation,
+      sanitize_text_field($message),
+      $http_code > 0 ? $http_code : null
+    );
   }
 
   private function get_headers(bool $with_content_type = false): array {

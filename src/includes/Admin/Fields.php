@@ -338,8 +338,17 @@ final class Fields {
     self::redirect_with_message(
       $scope,
       $result
-        ? __('Cloudflare configuration validated successfully.', Plugin::get_text_domain())
-        : __('Cloudflare configuration validation failed.', Plugin::get_text_domain()),
+        ? __(
+          'Cloudflare configuration validated successfully.',
+          Plugin::get_text_domain()
+        )
+        : self::client_error_message(
+          $client,
+          __(
+            'Cloudflare configuration validation failed.',
+            Plugin::get_text_domain()
+          )
+        ),
       $result ? 'updated' : 'error'
     );
   }
@@ -418,8 +427,17 @@ final class Fields {
     self::redirect_with_message(
       $scope,
       $create && $delete
-        ? __('The test block was created and removed successfully.', Plugin::get_text_domain())
-        : __('The test block could not be created or removed.', Plugin::get_text_domain()),
+        ? __(
+          'The test block was created and removed successfully.',
+          Plugin::get_text_domain()
+        )
+        : self::client_error_message(
+          $client,
+          __(
+            'The test block could not be created or removed.',
+            Plugin::get_text_domain()
+          )
+        ),
       $create && $delete ? 'updated' : 'error'
     );
   }
@@ -437,8 +455,15 @@ final class Fields {
     self::redirect_with_message(
       'site',
       $success
-        ? __('Synchronization completed successfully.', Plugin::get_text_domain())
-        : __('Synchronization failed.', Plugin::get_text_domain()),
+        ? __(
+          'Synchronization completed successfully.',
+          Plugin::get_text_domain()
+        )
+        : (
+          SyncScheduler::get_last_error_message() !== ''
+            ? SyncScheduler::get_last_error_message()
+            : __('Synchronization failed.', Plugin::get_text_domain())
+        ),
       $success ? 'updated' : 'error'
     );
   }
@@ -567,7 +592,13 @@ final class Fields {
     }
 
     self::redirect_manual_block(
-      __('The IP address could not be blocked.', Plugin::get_text_domain()),
+      self::client_error_message(
+        $client,
+        __(
+          'The IP address could not be blocked.',
+          Plugin::get_text_domain()
+        )
+      ),
       'error'
     );
   }
@@ -637,6 +668,15 @@ final class Fields {
         )
       );
     }
+  }
+
+  private static function client_error_message(
+    Client $client,
+    string $fallback
+  ): string {
+    $message = $client->get_last_error_message();
+
+    return $message !== '' ? $message : $fallback;
   }
 
   private static function redirect_with_message(

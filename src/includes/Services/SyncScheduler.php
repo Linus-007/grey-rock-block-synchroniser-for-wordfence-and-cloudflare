@@ -13,6 +13,8 @@ final class SyncScheduler {
   private const DELETE_BATCH_SIZE = 100;
   private const CLEANUP_HOOK = 'firewall_sync_cleanup_event';
 
+  private static string $lastErrorMessage = '';
+
   public static function register(): void {
     add_action(self::HOOK, [self::class, 'run_now']);
     add_action(self::CLEANUP_HOOK, [self::class, 'run_cleanup']);
@@ -56,6 +58,8 @@ final class SyncScheduler {
   }
 
   public static function run_now(): bool {
+    self::$lastErrorMessage = '';
+
     $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
     $zone = $options['cloudflare_zone_id'] ?? '';
@@ -64,18 +68,38 @@ final class SyncScheduler {
     $list_id = $options['cloudflare_list_id'] ?? '';
 
     if (empty($token)) {
+      self::$lastErrorMessage = __(
+        'Cloudflare API Token is required.',
+        Plugin::get_text_domain()
+      );
+
       return false;
     }
 
     if ($mode === 'account_list') {
       if (empty($account_id) || empty($list_id)) {
+        self::$lastErrorMessage = __(
+          'Cloudflare Account ID and List ID are required.',
+          Plugin::get_text_domain()
+        );
+
         return false;
       }
     } elseif (empty($zone)) {
+      self::$lastErrorMessage = __(
+        'Cloudflare Zone ID is required.',
+        Plugin::get_text_domain()
+      );
+
       return false;
     }
 
     if (!class_exists('\wfBlock')) {
+      self::$lastErrorMessage = __(
+        'Wordfence block data is unavailable.',
+        Plugin::get_text_domain()
+      );
+
       return false;
     }
 
@@ -163,7 +187,28 @@ final class SyncScheduler {
 
     delete_option('firewall_sync_is_running');
 
+    if (!empty($failed)) {
+      $client_error = $client->get_last_error_message();
+
+      self::$lastErrorMessage = $client_error !== ''
+        ? $client_error
+        : sprintf(
+          /* translators: %d: number of failed IP addresses */
+          __(
+            '%d IP address could not be synchronized.',
+            Plugin::get_text_domain()
+          ),
+          count($failed)
+        );
+
+      return false;
+    }
+
     return true;
+  }
+
+  public static function get_last_error_message(): string {
+    return self::$lastErrorMessage;
   }
 
   public static function run_cleanup(): void {
