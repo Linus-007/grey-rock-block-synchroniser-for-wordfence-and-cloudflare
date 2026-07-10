@@ -1,9 +1,0 @@
-{
-  "recommendations": [
-    "xdebug.php-debug",
-    "esbenp.prettier-vscode",
-    "ms-vscode-remote.remote-containers",
-    "ms-vscode.makefile-tools",
-    "junstyle.php-cs-fixer"
-  ]
-}
