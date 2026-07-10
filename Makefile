@@ -81,6 +81,6 @@ clean:
 pot:
 	@wp i18n make-pot \
 	  src \
-	  src/languages/wordfence-cloudflare-sync.pot \
+	  src/languages/wordpress-cloudflare-sync.pot \
 	  --domain=wordpress-cloudflare-sync \
 	  --allow-root
