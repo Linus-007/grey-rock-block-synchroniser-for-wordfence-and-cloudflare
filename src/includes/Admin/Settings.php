@@ -9,6 +9,7 @@ use WPCF\FirewallSync\Plugin;
 final class Settings {
   public static function register(): void {
     add_action('admin_menu', [self::class, 'add_settings_page']);
+    add_action('network_admin_menu', [self::class, 'add_settings_page']);
     add_action('admin_enqueue_scripts', [self::class, 'enqueue_styles']);
     add_action('load-toplevel_page_firewall-sync-settings', [self::class, 'add_help_tabs']);
   }
