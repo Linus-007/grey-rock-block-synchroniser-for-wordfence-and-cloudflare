@@ -46,9 +46,41 @@ final class Client {
     return wp_remote_retrieve_response_code($response) === 200;
   }
 
+  /**
+   * Determine whether an IP address already exists in an account list.
+   */
+  public function account_list_contains_ip(
+    string $account_id,
+    string $list_id,
+    string $ip
+  ): bool {
+    if (
+      $account_id === ''
+      || $list_id === ''
+      || !filter_var($ip, FILTER_VALIDATE_IP)
+    ) {
+      return false;
+    }
+
+    return $this->find_account_list_item_id_by_ip(
+      $account_id,
+      $list_id,
+      $ip
+    ) !== null;
+  }
+
   public function add_ip_to_account_list(string $account_id, string $list_id, string $ip, string $comment = ''): bool {
     if ($account_id === '' || $list_id === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
       return false;
+    }
+
+    /*
+     * Multiple WordPress sites may inherit the same network-level
+     * Cloudflare list. Treat an existing item as a successful sync rather
+     * than attempting to create a duplicate.
+     */
+    if ($this->find_account_list_item_id_by_ip($account_id, $list_id, $ip) !== null) {
+      return true;
     }
 
     $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items";

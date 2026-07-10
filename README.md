@@ -157,3 +157,14 @@ GPLv2 — same as WordPress.
 ## Disclaimer
 
 This plugin is not officially affiliated with Wordfence or Cloudflare. Use at your own risk.
+
+## Multisite configuration
+
+When network activated, the plugin supports two configuration sources:
+
+- **Network Admin configuration:** Shared Cloudflare defaults managed by a network administrator.
+- **Site-specific configuration:** Independent Cloudflare settings managed within an individual site when Network Admin permits overrides.
+
+Sites inheriting Network Admin settings synchronize their Wordfence blocks additively to the shared Cloudflare destination. Cleanup and reconciliation are disabled for inherited configurations because a site's local synchronization log cannot determine whether another site still requires the same Cloudflare entry.
+
+Sites using site-specific settings retain full synchronization, cleanup and reconciliation because the destination and ownership records are isolated to that site.

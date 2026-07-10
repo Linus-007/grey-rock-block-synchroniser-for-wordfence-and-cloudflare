@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync\Services;
 
 use WPCF\FirewallSync\Plugin;
+use WPCF\FirewallSync\Config;
 use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Services\BlockLogger;
 
@@ -18,10 +19,19 @@ final class SyncScheduler {
     add_action(self::CLEANUP_HOOK, [self::class, 'run_cleanup']);
     add_filter('cron_schedules', [self::class, 'custom_intervals']);
 
-    $options = get_option('firewall_sync_options');
-    
+    self::schedule_events();
+  }
+
+  /**
+   * Create missing synchronization and cleanup cron events.
+   */
+  private static function schedule_events(): void {
+    $options = Config::get_effective_options();
+
     $minutes = max(5, (int) ($options['sync_interval'] ?? 60));
-    $interval_key = $minutes === 5 ? 'every_5_minutes' : ($minutes === 15 ? 'every_15_minutes' : 'hourly');
+    $interval_key = $minutes === 5
+      ? 'every_5_minutes'
+      : ($minutes === 15 ? 'every_15_minutes' : 'hourly');
 
     if (!wp_next_scheduled(self::HOOK)) {
       wp_schedule_event(time(), $interval_key, self::HOOK);
@@ -47,7 +57,7 @@ final class SyncScheduler {
   }
 
   public static function run_now(): bool {
-    $options = get_option('firewall_sync_options');
+    $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
     $zone = $options['cloudflare_zone_id'] ?? '';
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
@@ -127,8 +137,18 @@ final class SyncScheduler {
 
   public static function run_cleanup(): void {
     global $wpdb;
+
+    /*
+     * A site inheriting Network Admin settings may share its Cloudflare
+     * destination with other sites. Its local log cannot determine whether
+     * another site still requires an address, so it must not delete entries
+     * from that shared destination.
+     */
+    if (is_multisite() && Config::uses_network_options()) {
+      return;
+    }
     
-    $options = get_option('firewall_sync_options');
+    $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
     $zone = $options['cloudflare_zone_id'] ?? '';
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
@@ -176,11 +196,16 @@ final class SyncScheduler {
     } while (count($rows) === self::DELETE_BATCH_SIZE);
   }
 
-  public static function deactivate(): void {
-    $timestamp = wp_next_scheduled(self::HOOK);
+  /**
+   * Replace existing schedules using the currently effective interval.
+   */
+  public static function reschedule(): void {
+    self::deactivate();
+    self::schedule_events();
+  }
 
-    if ($timestamp) {
-      wp_unschedule_event($timestamp, self::HOOK);
-    }
+  public static function deactivate(): void {
+    wp_clear_scheduled_hook(self::HOOK);
+    wp_clear_scheduled_hook(self::CLEANUP_HOOK);
   }
 }

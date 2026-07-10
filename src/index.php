@@ -1,10 +1,11 @@
 <?php
 /**
- * Plugin Name: Wordfence Cloudflare Firewall Sync
- * Description: Sync Wordfence IP blocks to Cloudflare's WAF at the DNS level
- * Version: 1.0.0
- * Author: Mike Orozco
- * Author URI: https://mikeorozco.dev
+ * Plugin Name: Greyscale Zone Wordfence Cloudflare Firewall Sync
+ * Plugin URI: https://greyscale.zone/
+ * Description: Sync Wordfence IP blocks to Cloudflare Zone Access Rules or a Cloudflare account-level IP list.
+ * Version: 1.1.0
+ * Author: Greyscale Zone
+ * Author URI: https://greyscale.zone/
  * Text Domain: wordpress-cloudflare-sync
  * Domain Path: /languages
  */
