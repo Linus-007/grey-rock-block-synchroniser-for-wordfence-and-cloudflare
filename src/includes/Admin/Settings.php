@@ -24,29 +24,33 @@ final class Settings {
 
     $screen->add_help_tab([
       'id' => 'cloudflare-token-help',
-      'title' => __('Cloudflare Token Setup', Plugin::get_text_domain()),
+      'title' => __('API Token Permissions', Plugin::get_text_domain()),
       'content' =>
         '<p>' .
         esc_html__(
-          'Create a Cloudflare API token with the permissions required by the selected Cloudflare mode.',
+          'Use a restricted Cloudflare API token. A Global API Key is not required.',
           Plugin::get_text_domain()
         ) .
         '</p>' .
         '<p><strong>' .
-        esc_html__('Zone Access Rules mode:', Plugin::get_text_domain()) .
+        esc_html__('Zone Access Rules mode', Plugin::get_text_domain()) .
         '</strong></p>' .
         '<ul>
           <li><code>Zone → Firewall Services: Edit</code></li>
-          <li><code>Zone → Zone Settings: Read</code></li>
           <li><code>Zone → Zone: Read</code></li>
         </ul>' .
         '<p><strong>' .
-        esc_html__('Account IP List mode:', Plugin::get_text_domain()) .
+        esc_html__('Account IP List mode', Plugin::get_text_domain()) .
         '</strong></p>' .
         '<ul>
           <li><code>Account → Account Filter Lists: Edit</code></li>
-          <li><code>Account → Account Settings: Read</code></li>
         </ul>' .
+        '<p>' .
+        esc_html__(
+          'Restrict the token to the required account or zones. DNS editing permission is not required.',
+          Plugin::get_text_domain()
+        ) .
+        '</p>' .
         '<p><a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">' .
         esc_html__('Open Cloudflare API Tokens', Plugin::get_text_domain()) .
         '</a></p>',
@@ -54,7 +58,7 @@ final class Settings {
 
     $screen->add_help_tab([
       'id' => 'cloudflare-identifiers-help',
-      'title' => __('Cloudflare IDs', Plugin::get_text_domain()),
+      'title' => __('Cloudflare Identifiers', Plugin::get_text_domain()),
       'content' =>
         '<p>' .
         esc_html__(
@@ -62,9 +66,32 @@ final class Settings {
           Plugin::get_text_domain()
         ) .
         '</p>' .
-        '<p><a href="https://developers.cloudflare.com/fundamentals/setup/find-account-and-zone-ids/" target="_blank" rel="noopener noreferrer">' .
-        esc_html__('Cloudflare account and zone ID documentation', Plugin::get_text_domain()) .
-        '</a></p>',
+        '<p>' .
+        esc_html__(
+          'The List ID is used by the API. The List Name is used in Custom Rule expressions and is entered without the dollar sign.',
+          Plugin::get_text_domain()
+        ) .
+        '</p>',
+    ]);
+
+    $screen->add_help_tab([
+      'id' => 'cloudflare-list-rule-help',
+      'title' => __('Account List Security Rule', Plugin::get_text_domain()),
+      'content' =>
+        '<p><strong>' .
+        esc_html__(
+          'An Account IP List does not block traffic by itself.',
+          Plugin::get_text_domain()
+        ) .
+        '</strong></p>' .
+        '<p>' .
+        esc_html__(
+          'Create a Cloudflare Custom Rule with the Block action in every zone that should use the list.',
+          Plugin::get_text_domain()
+        ) .
+        '</p>' .
+        '<p><code>ip.src in $greyrock_wordfence_blocks</code></p>' .
+        '<p><code>ip.src in $greyrock_wordfence_blocks and http.host eq &quot;example.com&quot;</code></p>',
     ]);
   }
 
@@ -196,6 +223,8 @@ final class Settings {
           </p>
         </div>
       <?php endif; ?>
+
+      <?php self::render_setup_guide(); ?>
 
       <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
         <?php wp_nonce_field('firewall_sync_save_settings', 'firewall_sync_save_settings_nonce'); ?>
@@ -339,6 +368,140 @@ final class Settings {
           <?php endif; ?>
         <?php endif; ?>
       <?php endif; ?>
+    </div>
+    <?php
+  }
+
+  private static function render_setup_guide(): void {
+    ?>
+    <div class="firewall-sync-guide">
+      <h2>
+        <?php echo esc_html__(
+          'Cloudflare Setup Guide',
+          Plugin::get_text_domain()
+        ); ?>
+      </h2>
+
+      <p>
+        <?php echo esc_html__(
+          'Complete these steps before relying on synchronisation. The plugin cannot create the account-list security rule for each domain.',
+          Plugin::get_text_domain()
+        ); ?>
+      </p>
+
+      <ol>
+        <li>
+          <?php echo esc_html__(
+            'Choose Zone Access Rules for one zone or Account IP List for a reusable list.',
+            Plugin::get_text_domain()
+          ); ?>
+        </li>
+        <li>
+          <?php echo esc_html__(
+            'Create a restricted Cloudflare API token with the permissions shown below.',
+            Plugin::get_text_domain()
+          ); ?>
+        </li>
+        <li>
+          <?php echo esc_html__(
+            'Enter the required identifiers and save the settings.',
+            Plugin::get_text_domain()
+          ); ?>
+        </li>
+        <li>
+          <?php echo esc_html__(
+            'Validate the saved configuration and run a test block.',
+            Plugin::get_text_domain()
+          ); ?>
+        </li>
+        <li>
+          <?php echo esc_html__(
+            'For Account IP List mode, create a Block Custom Rule in every Cloudflare zone that should use the list.',
+            Plugin::get_text_domain()
+          ); ?>
+        </li>
+      </ol>
+
+      <div class="firewall-sync-guide-grid">
+        <section>
+          <h3>
+            <?php echo esc_html__(
+              'Zone Access Rules mode',
+              Plugin::get_text_domain()
+            ); ?>
+          </h3>
+
+          <ul>
+            <li><code>Zone → Firewall Services: Edit</code></li>
+            <li><code>Zone → Zone: Read</code></li>
+          </ul>
+
+          <p>
+            <?php echo esc_html__(
+              'Required setting: Cloudflare Zone ID.',
+              Plugin::get_text_domain()
+            ); ?>
+          </p>
+        </section>
+
+        <section>
+          <h3>
+            <?php echo esc_html__(
+              'Account IP List mode',
+              Plugin::get_text_domain()
+            ); ?>
+          </h3>
+
+          <ul>
+            <li><code>Account → Account Filter Lists: Edit</code></li>
+          </ul>
+
+          <p>
+            <?php echo esc_html__(
+              'Required settings: Account ID and List ID. The List Name is used in Cloudflare rule expressions.',
+              Plugin::get_text_domain()
+            ); ?>
+          </p>
+        </section>
+      </div>
+
+      <div class="notice notice-warning inline firewall-sync-list-warning">
+        <p>
+          <strong>
+            <?php echo esc_html__(
+              'Account IP Lists do not block traffic by themselves.',
+              Plugin::get_text_domain()
+            ); ?>
+          </strong>
+        </p>
+
+        <p>
+          <?php echo esc_html__(
+            'Create a Cloudflare Custom Rule with the Block action:',
+            Plugin::get_text_domain()
+          ); ?>
+        </p>
+
+        <p><code>ip.src in $greyrock_wordfence_blocks</code></p>
+
+        <p>
+          <?php echo esc_html__(
+            'To apply the list to one hostname only:',
+            Plugin::get_text_domain()
+          ); ?>
+        </p>
+
+        <p>
+          <code>ip.src in $greyrock_wordfence_blocks and http.host eq "example.com"</code>
+        </p>
+
+        <p>
+          <?php echo esc_html__(
+            'Enter the List Name in this plugin without the dollar sign. Use the dollar sign only in the Cloudflare rule expression.',
+            Plugin::get_text_domain()
+          ); ?>
+        </p>
+      </div>
     </div>
     <?php
   }

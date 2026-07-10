@@ -71,31 +71,32 @@ final class Fields {
 
     self::add_text_field(
       'cloudflare_api_token',
-      __('Cloudflare API Token', Plugin::get_text_domain())
+      __('Cloudflare API Token', Plugin::get_text_domain()),
+      __('Paste the restricted API token created for this plugin.', Plugin::get_text_domain())
     );
 
     self::add_text_field(
       'cloudflare_zone_id',
       __('Cloudflare Zone ID', Plugin::get_text_domain()),
-      __('Required for Zone Access Rules mode', Plugin::get_text_domain())
+      __('32-character Zone ID required for Zone Access Rules mode', Plugin::get_text_domain())
     );
 
     self::add_text_field(
       'cloudflare_account_id',
       __('Cloudflare Account ID', Plugin::get_text_domain()),
-      __('Required for Account IP List mode', Plugin::get_text_domain())
+      __('32-character Account ID required for Account IP List mode', Plugin::get_text_domain())
     );
 
     self::add_text_field(
       'cloudflare_list_id',
       __('Cloudflare List ID', Plugin::get_text_domain()),
-      __('Required for Account IP List mode', Plugin::get_text_domain())
+      __('32-character List ID required for Account IP List mode', Plugin::get_text_domain())
     );
 
     self::add_text_field(
       'cloudflare_list_name',
       __('Cloudflare List Name', Plugin::get_text_domain()),
-      __('Optional administrative label', Plugin::get_text_domain())
+      __('Example: greyrock_wordfence_blocks', Plugin::get_text_domain())
     );
 
     self::add_sync_interval_field();
@@ -230,6 +231,35 @@ final class Fields {
           esc_attr($placeholder),
           disabled($disabled, true, false)
         );
+
+        $descriptions = [
+          'cloudflare_api_token' => __(
+            'Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Filter Lists: Edit. DNS editing permission is not required.',
+            Plugin::get_text_domain()
+          ),
+          'cloudflare_zone_id' => __(
+            'Find this on the Cloudflare zone Overview page. This is an identifier, not the domain name.',
+            Plugin::get_text_domain()
+          ),
+          'cloudflare_account_id' => __(
+            'Use the Account ID for the Cloudflare account that owns the IP list.',
+            Plugin::get_text_domain()
+          ),
+          'cloudflare_list_id' => __(
+            'The plugin uses the List ID for API requests. Do not enter the List Name here.',
+            Plugin::get_text_domain()
+          ),
+          'cloudflare_list_name' => __(
+            'Enter the actual Cloudflare list name without the dollar sign. Use it with a dollar sign in Cloudflare rules, for example: ip.src in $greyrock_wordfence_blocks. List names use lowercase letters, numbers and underscores.',
+            Plugin::get_text_domain()
+          ),
+        ];
+
+        if (isset($descriptions[$name])) {
+          echo '<p class="description">';
+          echo esc_html($descriptions[$name]);
+          echo '</p>';
+        }
       },
       'firewall-sync-settings',
       'firewall_sync_main_section'
