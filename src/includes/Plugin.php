@@ -50,11 +50,11 @@ final class Plugin {
 
   private static function define_constants(): void {
     if (!defined('WPCF_FS_VERSION')) {
-      define('WPCF_FS_VERSION', self::$VERSION);
+      define('WPCF_FS_VERSION', self::get_version());
     }
 
     if (!defined('WPCF_FS_PLUGIN_DIR')) {
-      define('WPCF_FS_PLUGIN_DIR', __DIR__ . '/../index.php');
+      define('WPCF_FS_PLUGIN_DIR', plugin_dir_path(__DIR__ . '/../index.php'));
     }
 
     if (!defined('WPCF_FS_PLUGIN_URL')) {
