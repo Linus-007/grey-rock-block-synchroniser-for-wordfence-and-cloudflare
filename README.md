@@ -70,7 +70,7 @@ A Cloudflare Global API Key is not required and should not be used.
 Clone the repository:
 
 ```bash
-git clone https://github.com/Linus-007/wordfence-cloudflare-firewall-sync.git
+git clone https://github.com/Linus-007/greyrock-wordfence-cloudflare-synchroniser.git
 ```
 
 Copy the contents of `src/` into:
