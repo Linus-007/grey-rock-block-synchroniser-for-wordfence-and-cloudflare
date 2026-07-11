@@ -1,7 +1,7 @@
-PLUGIN_SLUG := grey-rock-wordfence-cloudflare-synchroniser
-PLUGIN_ENTRY := src/index.php
+PLUGIN_SLUG := grey-rock-block-synchroniser-for-wordfence-and-cloudflare
+PLUGIN_ENTRY := src/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php
 RELEASE_DIR := dist
-RELEASE_ZIP := $(RELEASE_DIR)/grey-rock-wordfence-cloudflare-synchroniser.zip
+RELEASE_ZIP := $(RELEASE_DIR)/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 BUILD_SCRIPT := scripts/build-release.py
 GIT_REMOTE := fork
 PHP ?= php
@@ -14,8 +14,8 @@ help:
 	  'Available targets:' \
 	  '  make validate' \
 	  '  make build' \
-	  '  make release VERSION=1.1.8' \
-	  '  make tag-release VERSION=1.1.8' \
+	  '  make release VERSION=1.1.9' \
+	  '  make tag-release VERSION=1.1.9' \
 	  '  make clean' \
 	  '  make pot'
 
@@ -26,17 +26,22 @@ validate:
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
-	@grep -q '^ \* Text Domain: grey-rock-wordfence-cloudflare-synchroniser$$' "$(PLUGIN_ENTRY)"
+	@grep -q '^ \* Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^Contributors: greyscalezone$$' readme.txt
 	@grep -q '^== External services ==$$' readme.txt
 	@grep -q '^== Privacy ==$$' readme.txt
+	@echo "Checking for inline script tags..."
+	@if grep -RIn '<script' src --include='*.php'; then \
+	  echo "Inline script tag found."; \
+	  exit 1; \
+	fi
 	@echo "Checking repository whitespace..."
 	@git diff --check
 	@echo "Validation passed."
 
 version-check:
 	@if [ -z "$(VERSION)" ]; then \
-	  echo "VERSION is required. Example: make release VERSION=1.1.8"; \
+	  echo "VERSION is required. Example: make release VERSION=1.1.9"; \
 	  exit 1; \
 	fi
 	@if ! printf '%s\n' "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
@@ -86,6 +91,6 @@ clean:
 pot:
 	@wp i18n make-pot \
 	  src \
-	  src/languages/grey-rock-wordfence-cloudflare-synchroniser.pot \
-	  --domain=grey-rock-wordfence-cloudflare-synchroniser \
+	  src/languages/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.pot \
+	  --domain=grey-rock-block-synchroniser-for-wordfence-and-cloudflare \
 	  --allow-root

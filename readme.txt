@@ -1,10 +1,10 @@
-=== Grey Rock Wordfence-Cloudflare Synchroniser ===
+=== Grey Rock Block Synchroniser for Wordfence and Cloudflare ===
 Contributors: greyscalezone
 Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.1.8
+Stable tag: 1.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,7 +12,7 @@ Synchronises current and historical Wordfence firewall blocks with Cloudflare.
 
 == Description ==
 
-Grey Rock Wordfence-Cloudflare Synchroniser sends qualifying Wordfence firewall blocks to Cloudflare so hostile traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
+Grey Rock Block Synchroniser for Wordfence and Cloudflare sends qualifying Wordfence firewall blocks to Cloudflare so hostile traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
 The plugin supports two Cloudflare destinations.
 
@@ -90,7 +90,7 @@ A future Wordfence release could change its internal class or database schema. S
 
 = Independence and trademarks =
 
-Grey Rock Wordfence-Cloudflare Synchroniser is developed independently by Greyscale Zone.
+Grey Rock Block Synchroniser for Wordfence and Cloudflare is developed independently by Greyscale Zone.
 
 This plugin is not affiliated with, endorsed by or sponsored by Wordfence or Cloudflare. Wordfence and Cloudflare are trademarks of their respective owners.
 
@@ -153,8 +153,8 @@ Uninstalling the plugin removes its local plugin options and tables according to
 == Installation ==
 
 1. Install and activate Wordfence.
-2. Install and activate Grey Rock Wordfence-Cloudflare Synchroniser.
-3. Open Grey Rock Synchroniser in WordPress administration.
+2. Install and activate Grey Rock Block Synchroniser for Wordfence and Cloudflare.
+3. Open Grey Rock Block Synchroniser in WordPress administration.
 4. Select Zone Access Rules or Account IP List mode.
 5. Create a restricted Cloudflare API token.
 6. Enter the Cloudflare identifiers required for the selected mode.
@@ -242,11 +242,21 @@ No.
 
 == Changelog ==
 
+= 1.1.9 =
+
+* Renamed the plugin to Grey Rock Block Synchroniser for Wordfence and Cloudflare.
+* Changed the plugin slug and text domain to `grey-rock-block-synchroniser-for-wordfence-and-cloudflare`.
+* Renamed the main plugin file to `grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php`.
+* Moved administration JavaScript to `assets/admin.js`.
+* Enqueued administration JavaScript through WordPress.
+* Updated repository URLs, release packaging and translation metadata.
+
+
 = 1.1.8 =
 
 * Changed all branding from Grey Rock to Grey Rock.
-* Changed the plugin slug and text domain to `grey-rock-wordfence-cloudflare-synchroniser`.
-* Changed the release ZIP and plugin directory name to `grey-rock-wordfence-cloudflare-synchroniser`.
+* Changed the plugin slug and text domain to `grey-rock-block-synchroniser-for-wordfence-and-cloudflare`.
+* Changed the release ZIP and plugin directory name to `grey-rock-block-synchroniser-for-wordfence-and-cloudflare`.
 * Renamed the translation template to match the new text domain.
 * Changed PHP global prefixes from `grey_rock_` to `grey_rock_`.
 * Updated repository and documentation URLs for the Grey Rock name.
@@ -292,14 +302,6 @@ No.
 
 == Upgrade Notice ==
 
-= 1.1.8 =
+= 1.1.9 =
 
-Completes the Grey Rock branding change across all display names and technical identifiers.
-
-= 1.1.7 =
-
-Improves WordPress.org compliance for input handling, escaping, translation strings and direct file access.
-
-= 1.1.6 =
-
-Adds WordPress.org metadata, external-service disclosure, privacy documentation and separate submission packaging.
+Renames the plugin and technical identifiers to satisfy WordPress.org naming and plugin-structure requirements.

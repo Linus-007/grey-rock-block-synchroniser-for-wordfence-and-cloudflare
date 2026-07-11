@@ -26,7 +26,7 @@ final class Plugin {
 
   public static function get_version(): string {
     if (!isset(self::$VERSION)) {
-      $plugin_file = plugin_dir_path(__DIR__ . '/../index.php') . 'index.php';
+      $plugin_file = plugin_dir_path(__DIR__ . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php') . 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php';
       $plugin_data = get_file_data($plugin_file, ['Version' => 'Version']);
       self::$VERSION = $plugin_data['Version'] ?? '0.0.0';
     }
@@ -36,7 +36,7 @@ final class Plugin {
 
   public static function get_text_domain(): string {
     if (!isset(self::$TEXTDOMAIN)) {
-      $plugin_file = plugin_dir_path(__DIR__ . '/../index.php') . 'index.php';
+      $plugin_file = plugin_dir_path(__DIR__ . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php') . 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php';
       $plugin_data = get_file_data($plugin_file, ['Text Domain' => 'Text Domain']);
       self::$TEXTDOMAIN = $plugin_data['Text Domain'];
     }
@@ -50,11 +50,11 @@ final class Plugin {
     }
 
     if (!defined('WPCF_FS_PLUGIN_DIR')) {
-      define('WPCF_FS_PLUGIN_DIR', plugin_dir_path(__DIR__ . '/../index.php'));
+      define('WPCF_FS_PLUGIN_DIR', plugin_dir_path(__DIR__ . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'));
     }
 
     if (!defined('WPCF_FS_PLUGIN_URL')) {
-      define('WPCF_FS_PLUGIN_URL', plugin_dir_url(__DIR__ . '/../index.php'));
+      define('WPCF_FS_PLUGIN_URL', plugin_dir_url(__DIR__ . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'));
     }
   }
 
@@ -163,7 +163,7 @@ final class Plugin {
     }
 
     $plugin_basename = plugin_basename(
-      WPCF_FS_PLUGIN_DIR . 'index.php'
+      WPCF_FS_PLUGIN_DIR . 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
     );
 
     return array_key_exists($plugin_basename, $active_plugins);

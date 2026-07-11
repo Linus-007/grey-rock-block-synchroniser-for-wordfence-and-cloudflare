@@ -56,12 +56,12 @@ final class SyncScheduler {
   public static function custom_intervals(array $schedules): array {
     $schedules['every_5_minutes'] = [
       'interval' => 300,
-      'display' => __('Every 5 Minutes', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      'display' => __('Every 5 Minutes', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
     ];
 
     $schedules['every_15_minutes'] = [
       'interval' => 900,
-      'display' => __('Every 15 Minutes', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      'display' => __('Every 15 Minutes', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
     ];
 
     return $schedules;
@@ -81,7 +81,7 @@ final class SyncScheduler {
     if (empty($token)) {
       self::$lastErrorMessage = __(
         'Cloudflare API Token is required.',
-        'grey-rock-wordfence-cloudflare-synchroniser'
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
       );
 
       return false;
@@ -94,7 +94,7 @@ final class SyncScheduler {
       ) {
         self::$lastErrorMessage = __(
           'Cloudflare Account ID and List Name are required.',
-          'grey-rock-wordfence-cloudflare-synchroniser'
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
         );
 
         return false;
@@ -102,7 +102,7 @@ final class SyncScheduler {
     } elseif (empty($zone)) {
       self::$lastErrorMessage = __(
         'Cloudflare Zone ID is required.',
-        'grey-rock-wordfence-cloudflare-synchroniser'
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
       );
 
       return false;
@@ -155,7 +155,7 @@ final class SyncScheduler {
     foreach ($blocks as $block) {
       $ip = (string) ($block['ip'] ?? '');
       $reason = $block['reason']
-        ?? __('Unknown', 'grey-rock-wordfence-cloudflare-synchroniser');
+        ?? __('Unknown', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
       $expiration = (int) ($block['expirationUnix'] ?? 0);
       $is_permanent = !empty($block['permanent']);
 
@@ -236,7 +236,7 @@ final class SyncScheduler {
             'Wordfence historical WAF block: %d event',
             'Wordfence historical WAF block: %d events',
             $event_count,
-            'grey-rock-wordfence-cloudflare-synchroniser'
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
           ),
           $event_count
         ),
@@ -302,7 +302,7 @@ final class SyncScheduler {
           /* translators: %d: number of failed IP addresses */
           __(
             '%d IP address could not be synchronized.',
-            'grey-rock-wordfence-cloudflare-synchroniser'
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
           ),
           count($failed)
         );

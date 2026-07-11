@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Grey Rock Wordfence-Cloudflare Synchroniser
- * Plugin URI: https://github.com/Linus-007/grey-rock-wordfence-cloudflare-synchroniser
+ * Plugin Name: Grey Rock Block Synchroniser for Wordfence and Cloudflare
+ * Plugin URI: https://github.com/Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare
  * Description: Synchronises current and historical Wordfence firewall blocks with Cloudflare Zone Access Rules or an account-level IP list.
- * Version: 1.1.8
+ * Version: 1.1.9
  * Requires at least: 6.0
  * Tested up to: 7.0
  * Requires PHP: 8.1
@@ -11,7 +11,7 @@
  * Author URI: https://greyscale.zone/
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: grey-rock-wordfence-cloudflare-synchroniser
+ * Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare
  * Domain Path: /languages
  */
 

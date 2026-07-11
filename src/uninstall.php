@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+namespace WPCF\FirewallSync;
 
-
-namespace WPCF\FirewallSync;if (!defined('WP_UNINSTALL_PLUGIN')) {
+if (!defined('WP_UNINSTALL_PLUGIN')) {
   exit;
 }
 
@@ -19,11 +19,10 @@ namespace WPCF\FirewallSync;if (!defined('WP_UNINSTALL_PLUGIN')) {
  * phpcs:disable PluginCheck.Security.DirectDB.UnescapedDBParameter
  */
 
-
 /**
  * Remove this plugin's site-specific table and options from the current site.
  */
-function grey_rock_wordfence_cloudflare_synchroniser_uninstall_site(): void {
+function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site(): void {
   global $wpdb;
 
   $table = $wpdb->prefix . 'wpcf_sync_blocks';
@@ -48,7 +47,7 @@ if (is_multisite()) {
     switch_to_blog((int) $blog_id);
 
     try {
-      grey_rock_wordfence_cloudflare_synchroniser_uninstall_site();
+      grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
     } finally {
       restore_current_blog();
     }
@@ -57,5 +56,5 @@ if (is_multisite()) {
   delete_site_option('firewall_sync_network_options');
   delete_site_option('firewall_sync_network_version');
 } else {
-  grey_rock_wordfence_cloudflare_synchroniser_uninstall_site();
+  grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
 }

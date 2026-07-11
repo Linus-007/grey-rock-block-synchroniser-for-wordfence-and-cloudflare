@@ -1,8 +1,8 @@
-# Grey Rock Wordfence-Cloudflare Synchroniser
+# Grey Rock Block Synchroniser for Wordfence and Cloudflare
 
-Grey Rock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
+Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.1.8-blue)
+![Version](https://img.shields.io/badge/version-1.1.9-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-7.0.1-tested-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -10,7 +10,7 @@ Grey Rock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by
 
 ## Name and identity
 
-**Grey Rock Wordfence-Cloudflare Synchroniser** is developed by Greyscale Zone.
+**Grey Rock Block Synchroniser for Wordfence and Cloudflare** is developed by Greyscale Zone.
 
 The name *Grey Rock* reflects the defensive principle of remaining unresponsive and unrewarding to hostile or manipulative behaviour. Automated attackers similarly depend on finding systems that respond predictably or expose useful weaknesses. The plugin applies that concept by moving Wordfence block intelligence to Cloudflare's network edge.
 
@@ -18,8 +18,8 @@ The existing technical identifiers are intentionally retained for compatibility:
 
 - plugin directory: `wordfence-cloudflare-firewall-sync`;
 - main plugin file: `index.php`;
-- GitHub repository: `grey-rock-wordfence-cloudflare-synchroniser`;
-- release ZIP: `grey-rock-wordfence-cloudflare-synchroniser.zip`;
+- GitHub repository: `grey-rock-block-synchroniser-for-wordfence-and-cloudflare`;
+- release ZIP: `grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip`;
 - WordPress option names, hooks and database table names.
 
 Retaining these identifiers allows WordPress to recognise an upgrade as the same installed plugin rather than a different plugin.
@@ -76,7 +76,7 @@ A Cloudflare Global API Key is not required and should not be used.
 ### GitHub release
 
 1. Open the repository Releases page.
-2. Download `grey-rock-wordfence-cloudflare-synchroniser.zip`.
+2. Download `grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip`.
 3. In WordPress, open **Plugins → Add Plugin → Upload Plugin**.
 4. Select the ZIP file.
 5. Install and activate the plugin.
@@ -87,7 +87,7 @@ A Cloudflare Global API Key is not required and should not be used.
 Clone the repository:
 
 ```bash
-git clone https://github.com/Linus-007/grey-rock-wordfence-cloudflare-synchroniser.git
+git clone https://github.com/Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.git
 ```
 
 Copy the contents of `src/` into:
@@ -100,7 +100,7 @@ The installed directory should contain:
 
 ```text
 wordfence-cloudflare-firewall-sync/
-├── index.php
+├── grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php
 ├── readme.txt
 ├── uninstall.php
 ├── assets/

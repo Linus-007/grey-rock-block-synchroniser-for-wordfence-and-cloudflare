@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 
-DEFAULT_PLUGIN_SLUG = "grey-rock-wordfence-cloudflare-synchroniser"
+DEFAULT_PLUGIN_SLUG = "grey-rock-block-synchroniser-for-wordfence-and-cloudflare"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -26,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
         "--output",
         default=(
             "dist/"
-            "grey-rock-wordfence-cloudflare-synchroniser.zip"
+            "grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip"
         ),
         help="Release ZIP path.",
     )
@@ -131,7 +131,7 @@ def verify_zip(
         )
 
     required_files = (
-        f"{plugin_slug}/index.php",
+        f"{plugin_slug}/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php",
         f"{plugin_slug}/uninstall.php",
         f"{plugin_slug}/readme.txt",
     )

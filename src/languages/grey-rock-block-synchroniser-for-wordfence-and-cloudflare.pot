@@ -1,8 +1,8 @@
 # Copyright (C) 2025 Mike Orozco
-# This file is distributed under the same licence as the Grey Rock Wordfence-Cloudflare Synchroniser plugin.
+# This file is distributed under the same licence as the Grey Rock Block Synchroniser for Wordfence and Cloudflare plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Grey Rock Wordfence-Cloudflare Synchroniser 1.1.8
+"Project-Id-Version: Grey Rock Block Synchroniser for Wordfence and Cloudflare 1.1.9
 "
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wordfence-cloudflare-sync\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
@@ -13,11 +13,12 @@ msgstr ""
 "POT-Creation-Date: 2025-03-31T03:18:24+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.11.0\n"
-"X-Domain: grey-rock-wordfence-cloudflare-synchroniser\n"
+"X-Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare
+"
 
 #. Plugin Name of the plugin
 #: index.php
-msgid "Grey Rock Wordfence-Cloudflare Synchroniser"
+msgid "Grey Rock Block Synchroniser for Wordfence and Cloudflare"
 msgstr ""
 
 #. Description of the plugin
