@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 
-DEFAULT_PLUGIN_SLUG = "wordfence-cloudflare-firewall-sync"
+DEFAULT_PLUGIN_SLUG = "grey-rock-wordfence-cloudflare-synchroniser"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -26,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
         "--output",
         default=(
             "dist/"
-            "greyrock-wordfence-cloudflare-synchroniser.zip"
+            "grey-rock-wordfence-cloudflare-synchroniser.zip"
         ),
         help="Release ZIP path.",
     )

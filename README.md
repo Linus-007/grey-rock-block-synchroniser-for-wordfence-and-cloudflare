@@ -1,8 +1,8 @@
-# Greyrock Wordfence-Cloudflare Synchroniser
+# Grey Rock Wordfence-Cloudflare Synchroniser
 
-Greyrock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
+Grey Rock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.1.7-blue)
+![Version](https://img.shields.io/badge/version-1.1.8-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-7.0.1-tested-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -10,16 +10,16 @@ Greyrock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by 
 
 ## Name and identity
 
-**Greyrock Wordfence-Cloudflare Synchroniser** is developed by Greyscale Zone.
+**Grey Rock Wordfence-Cloudflare Synchroniser** is developed by Greyscale Zone.
 
-The name *Greyrock* reflects the defensive principle of remaining unresponsive and unrewarding to hostile or manipulative behaviour. Automated attackers similarly depend on finding systems that respond predictably or expose useful weaknesses. The plugin applies that concept by moving Wordfence block intelligence to Cloudflare's network edge.
+The name *Grey Rock* reflects the defensive principle of remaining unresponsive and unrewarding to hostile or manipulative behaviour. Automated attackers similarly depend on finding systems that respond predictably or expose useful weaknesses. The plugin applies that concept by moving Wordfence block intelligence to Cloudflare's network edge.
 
 The existing technical identifiers are intentionally retained for compatibility:
 
 - plugin directory: `wordfence-cloudflare-firewall-sync`;
 - main plugin file: `index.php`;
-- GitHub repository: `greyrock-wordfence-cloudflare-synchroniser`;
-- release ZIP: `greyrock-wordfence-cloudflare-synchroniser.zip`;
+- GitHub repository: `grey-rock-wordfence-cloudflare-synchroniser`;
+- release ZIP: `grey-rock-wordfence-cloudflare-synchroniser.zip`;
 - WordPress option names, hooks and database table names.
 
 Retaining these identifiers allows WordPress to recognise an upgrade as the same installed plugin rather than a different plugin.
@@ -28,7 +28,7 @@ Retaining these identifiers allows WordPress to recognise an upgrade as the same
 
 The plugin reads current Wordfence blocks and historical Wordfence WAF events recorded as `blocked:waf`, then sends qualifying public IP addresses to Cloudflare using one of two modes.
 
-The plugin does not assume that a particular private Wordfence PHP method is available. When the installed Wordfence version does not expose its active-block API, Greyrock continues using the verified historical WAF event table instead of terminating synchronization.
+The plugin does not assume that a particular private Wordfence PHP method is available. When the installed Wordfence version does not expose its active-block API, Grey Rock continues using the verified historical WAF event table instead of terminating synchronization.
 
 Historical synchronization is configurable:
 
@@ -76,7 +76,7 @@ A Cloudflare Global API Key is not required and should not be used.
 ### GitHub release
 
 1. Open the repository Releases page.
-2. Download `greyrock-wordfence-cloudflare-synchroniser.zip`.
+2. Download `grey-rock-wordfence-cloudflare-synchroniser.zip`.
 3. In WordPress, open **Plugins → Add Plugin → Upload Plugin**.
 4. Select the ZIP file.
 5. Install and activate the plugin.
@@ -87,7 +87,7 @@ A Cloudflare Global API Key is not required and should not be used.
 Clone the repository:
 
 ```bash
-git clone https://github.com/Linus-007/greyrock-wordfence-cloudflare-synchroniser.git
+git clone https://github.com/Linus-007/grey-rock-wordfence-cloudflare-synchroniser.git
 ```
 
 Copy the contents of `src/` into:
@@ -428,7 +428,7 @@ ip.src in wordfence_hot_blocklist
 Incorrect because the name contains capitals and hyphens:
 
 ```text
-ip.src in $Greyrock-Wordfence-Blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
 ### Wordfence block data is unavailable
@@ -448,47 +448,6 @@ The complete external-service, privacy, retention and uninstall disclosures are 
 
 ## Release building
 
-### WordPress.org package
-
-Build the WordPress.org submission ZIP with:
-
-    make wordpress-org
-
-The normal GitHub package retains the historical plugin directory name for existing installations.
-
-The WordPress.org package uses:
-
-    greyrock-wordfence-cloudflare-synchroniser
-
-Build both packages with:
-
-    make release VERSION=1.1.7
-
-
-
-Validate the source:
-
-```bash
-make validate
-```
-
-Build the WordPress-ready ZIP:
-
-```bash
-make build
-```
-
-Create a versioned local release:
-
-```bash
-make release VERSION=1.1.2
-```
-
-Create and push the Git tag to the writable `fork` remote:
-
-```bash
-make tag-release VERSION=1.1.2
-```
 
 ## Contributing
 

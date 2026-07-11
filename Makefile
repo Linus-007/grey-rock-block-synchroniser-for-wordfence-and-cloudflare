@@ -1,24 +1,21 @@
-PLUGIN_SLUG := wordfence-cloudflare-firewall-sync
-WORDPRESS_ORG_SLUG := greyrock-wordfence-cloudflare-synchroniser
+PLUGIN_SLUG := grey-rock-wordfence-cloudflare-synchroniser
 PLUGIN_ENTRY := src/index.php
 RELEASE_DIR := dist
-RELEASE_ZIP := $(RELEASE_DIR)/greyrock-wordfence-cloudflare-synchroniser.zip
-WORDPRESS_ORG_ZIP := $(RELEASE_DIR)/greyrock-wordfence-cloudflare-synchroniser-wordpress-org.zip
+RELEASE_ZIP := $(RELEASE_DIR)/grey-rock-wordfence-cloudflare-synchroniser.zip
 BUILD_SCRIPT := scripts/build-release.py
 GIT_REMOTE := fork
 PHP ?= php
 PYTHON ?= python3
 
-.PHONY: help validate version-check build wordpress-org release tag-release clean pot
+.PHONY: help validate version-check build release tag-release clean pot
 
 help:
 	@printf '%s\n' \
 	  'Available targets:' \
 	  '  make validate' \
 	  '  make build' \
-	  '  make wordpress-org' \
-	  '  make release VERSION=1.1.7' \
-	  '  make tag-release VERSION=1.1.7' \
+	  '  make release VERSION=1.1.8' \
+	  '  make tag-release VERSION=1.1.8' \
 	  '  make clean' \
 	  '  make pot'
 
@@ -29,7 +26,7 @@ validate:
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
-	@grep -q '^ \* Text Domain: greyrock-wordfence-cloudflare-synchroniser$$' "$(PLUGIN_ENTRY)"
+	@grep -q '^ \* Text Domain: grey-rock-wordfence-cloudflare-synchroniser$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^Contributors: greyscalezone$$' readme.txt
 	@grep -q '^== External services ==$$' readme.txt
 	@grep -q '^== Privacy ==$$' readme.txt
@@ -39,7 +36,7 @@ validate:
 
 version-check:
 	@if [ -z "$(VERSION)" ]; then \
-	  echo "VERSION is required. Example: make release VERSION=1.1.7"; \
+	  echo "VERSION is required. Example: make release VERSION=1.1.8"; \
 	  exit 1; \
 	fi
 	@if ! printf '%s\n' "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
@@ -58,25 +55,15 @@ version-check:
 	fi
 
 build: validate clean
-	@echo "Building GitHub-compatible release..."
+	@echo "Building release..."
 	@$(PYTHON) "$(BUILD_SCRIPT)" \
 	  --source src \
 	  --readme readme.txt \
 	  --plugin-slug "$(PLUGIN_SLUG)" \
 	  --output "$(RELEASE_ZIP)"
 
-wordpress-org: validate
-	@mkdir -p "$(RELEASE_DIR)"
-	@echo "Building WordPress.org submission package..."
-	@$(PYTHON) "$(BUILD_SCRIPT)" \
-	  --source src \
-	  --readme readme.txt \
-	  --plugin-slug "$(WORDPRESS_ORG_SLUG)" \
-	  --output "$(WORDPRESS_ORG_ZIP)"
-
-release: version-check build wordpress-org
-	@echo "GitHub release ZIP: $(RELEASE_ZIP)"
-	@echo "WordPress.org ZIP: $(WORDPRESS_ORG_ZIP)"
+release: version-check build
+	@echo "Release ZIP: $(RELEASE_ZIP)"
 
 tag-release: version-check validate
 	@if ! git diff --quiet || ! git diff --cached --quiet; then \
@@ -99,6 +86,6 @@ clean:
 pot:
 	@wp i18n make-pot \
 	  src \
-	  src/languages/greyrock-wordfence-cloudflare-synchroniser.pot \
-	  --domain=greyrock-wordfence-cloudflare-synchroniser \
+	  src/languages/grey-rock-wordfence-cloudflare-synchroniser.pot \
+	  --domain=grey-rock-wordfence-cloudflare-synchroniser \
 	  --allow-root

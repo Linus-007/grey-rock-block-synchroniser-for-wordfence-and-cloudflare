@@ -4,6 +4,17 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync\Services;
 
+
+/*
+ * Direct database access is required to read Wordfence WAF history.
+ * The table name uses the trusted WordPress base prefix plus the
+ * fixed Wordfence table suffix; it is never supplied by a user.
+ *
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+ * phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+ * phpcs:disable PluginCheck.Security.DirectDB.UnescapedDBParameter
+ */
 final class HistoricalBlockReader {
   private const WORDFENCE_ACTION = 'blocked:waf';
 

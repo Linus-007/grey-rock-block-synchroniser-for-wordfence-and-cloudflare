@@ -21,8 +21,8 @@ final class LogTable extends WP_List_Table {
 	public function __construct() {
 		parent::__construct(
 			[
-				'singular' => __( 'Firewall Block', 'greyrock-wordfence-cloudflare-synchroniser' ),
-				'plural'   => __( 'Firewall Blocks', 'greyrock-wordfence-cloudflare-synchroniser' ),
+				'singular' => __( 'Firewall Block', 'grey-rock-wordfence-cloudflare-synchroniser' ),
+				'plural'   => __( 'Firewall Blocks', 'grey-rock-wordfence-cloudflare-synchroniser' ),
 				'ajax'     => false,
 			]
 		);
@@ -32,13 +32,18 @@ final class LogTable extends WP_List_Table {
 		$per_page    = 10;
 		$current_page = 1;
 
+		/*
+		 * This is a read-only pagination value. It does not change
+		 * WordPress or plugin state.
+		 */
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET['paged'] ) ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only pagination parameter.
 			$current_page = max(
 				1,
 				absint( wp_unslash( $_GET['paged'] ) )
 			);
 		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		$total_items = BlockLogger::count();
 
@@ -60,9 +65,9 @@ final class LogTable extends WP_List_Table {
 
 	public function get_columns(): array {
 		return [
-			'ip'         => __( 'IP Address', 'greyrock-wordfence-cloudflare-synchroniser' ),
-			'reason'     => __( 'Reason', 'greyrock-wordfence-cloudflare-synchroniser' ),
-			'created_at' => __( 'Created At', 'greyrock-wordfence-cloudflare-synchroniser' ),
+			'ip'         => __( 'IP Address', 'grey-rock-wordfence-cloudflare-synchroniser' ),
+			'reason'     => __( 'Reason', 'grey-rock-wordfence-cloudflare-synchroniser' ),
+			'created_at' => __( 'Created At', 'grey-rock-wordfence-cloudflare-synchroniser' ),
 		];
 	}
 
@@ -71,6 +76,6 @@ final class LogTable extends WP_List_Table {
 	}
 
 	public function no_items(): void {
-		echo '<p>' . esc_html__( 'No firewall blocks found.', 'greyrock-wordfence-cloudflare-synchroniser' ) . '</p>';
+		echo '<p>' . esc_html__( 'No firewall blocks found.', 'grey-rock-wordfence-cloudflare-synchroniser' ) . '</p>';
 	}
 }

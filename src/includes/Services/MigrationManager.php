@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync\Services;
 
+
+/*
+ * Direct database access is intentional during controlled migration
+ * of the plugin's own table. Migration results must not be cached.
+ *
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+ * phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+ */
 use WPCF\FirewallSync\Config;
 use WPCF\FirewallSync\Plugin;
 

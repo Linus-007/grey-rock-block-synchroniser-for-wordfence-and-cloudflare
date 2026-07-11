@@ -2,14 +2,28 @@
 
 declare(strict_types=1);
 
-if (!defined('WP_UNINSTALL_PLUGIN')) {
+
+
+namespace WPCF\FirewallSync;if (!defined('WP_UNINSTALL_PLUGIN')) {
   exit;
 }
+
+/*
+ * Plugin uninstall intentionally removes the plugin-owned table.
+ * The table name uses the trusted WordPress prefix plus a fixed suffix.
+ *
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.SchemaChange
+ * phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+ * phpcs:disable PluginCheck.Security.DirectDB.UnescapedDBParameter
+ */
+
 
 /**
  * Remove this plugin's site-specific table and options from the current site.
  */
-function greyscale_zone_firewall_sync_uninstall_site(): void {
+function grey_rock_wordfence_cloudflare_synchroniser_uninstall_site(): void {
   global $wpdb;
 
   $table = $wpdb->prefix . 'wpcf_sync_blocks';
@@ -34,7 +48,7 @@ if (is_multisite()) {
     switch_to_blog((int) $blog_id);
 
     try {
-      greyscale_zone_firewall_sync_uninstall_site();
+      grey_rock_wordfence_cloudflare_synchroniser_uninstall_site();
     } finally {
       restore_current_blog();
     }
@@ -43,5 +57,5 @@ if (is_multisite()) {
   delete_site_option('firewall_sync_network_options');
   delete_site_option('firewall_sync_network_version');
 } else {
-  greyscale_zone_firewall_sync_uninstall_site();
+  grey_rock_wordfence_cloudflare_synchroniser_uninstall_site();
 }

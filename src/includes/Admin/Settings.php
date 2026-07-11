@@ -25,23 +25,23 @@ final class Settings {
 
     $screen->add_help_tab([
       'id' => 'cloudflare-token-help',
-      'title' => __('API Token Permissions', 'greyrock-wordfence-cloudflare-synchroniser'),
+      'title' => __('API Token Permissions', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'content' =>
         '<p>' .
         esc_html__(
           'Use a restricted Cloudflare API token. A Global API Key is not required.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</p>' .
         '<p><strong>' .
-        esc_html__('Zone Access Rules mode', 'greyrock-wordfence-cloudflare-synchroniser') .
+        esc_html__('Zone Access Rules mode', 'grey-rock-wordfence-cloudflare-synchroniser') .
         '</strong></p>' .
         '<ul>
           <li><code>Zone → Firewall Services: Edit</code></li>
           <li><code>Zone → Zone: Read</code></li>
         </ul>' .
         '<p><strong>' .
-        esc_html__('Account IP List mode', 'greyrock-wordfence-cloudflare-synchroniser') .
+        esc_html__('Account IP List mode', 'grey-rock-wordfence-cloudflare-synchroniser') .
         '</strong></p>' .
         '<ul>
           <li><code>Account → Account Rule Lists: Edit</code></li>
@@ -49,46 +49,46 @@ final class Settings {
         '<p>' .
         esc_html__(
           'Restrict the token to the required account or zones. DNS editing permission is not required.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</p>' .
         '<p><a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">' .
-        esc_html__('Open Cloudflare API Tokens', 'greyrock-wordfence-cloudflare-synchroniser') .
+        esc_html__('Open Cloudflare API Tokens', 'grey-rock-wordfence-cloudflare-synchroniser') .
         '</a></p>',
     ]);
 
     $screen->add_help_tab([
       'id' => 'cloudflare-identifiers-help',
-      'title' => __('Cloudflare Identifiers', 'greyrock-wordfence-cloudflare-synchroniser'),
+      'title' => __('Cloudflare Identifiers', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'content' =>
         '<p>' .
         esc_html__(
           'Zone Access Rules mode requires a Zone ID. Account IP List mode requires an Account ID and List Name. The plugin finds the hidden internal List ID automatically.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</p>' .
         '<p>' .
         esc_html__(
           'The List ID is used by the API. The List Name is used in Custom Rule expressions and is entered without the dollar sign.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</p>',
     ]);
 
     $screen->add_help_tab([
       'id' => 'cloudflare-list-rule-help',
-      'title' => __('Account List Security Rule', 'greyrock-wordfence-cloudflare-synchroniser'),
+      'title' => __('Account List Security Rule', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'content' =>
         '<p><strong>' .
         esc_html__(
           'An Account IP List does not block traffic by itself.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</strong></p>' .
         '<p>' .
         esc_html__(
           'Create a Cloudflare Custom Rule with the Block action in every zone that should use the list.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ) .
         '</p>' .
         '<p><code>ip.src in $wordfence_hot_blocklist</code></p>' .
@@ -98,8 +98,8 @@ final class Settings {
 
   public static function add_site_settings_page(): void {
     add_menu_page(
-      __('Greyrock Synchroniser', 'greyrock-wordfence-cloudflare-synchroniser'),
-      __('Greyrock Synchroniser', 'greyrock-wordfence-cloudflare-synchroniser'),
+      __('Grey Rock Synchroniser', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      __('Grey Rock Synchroniser', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'manage_options',
       'firewall-sync-settings',
       [self::class, 'render_settings'],
@@ -109,8 +109,8 @@ final class Settings {
 
     add_submenu_page(
       'firewall-sync-settings',
-      __('Block Log', 'greyrock-wordfence-cloudflare-synchroniser'),
-      __('Block Log', 'greyrock-wordfence-cloudflare-synchroniser'),
+      __('Block Log', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      __('Block Log', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'manage_options',
       'firewall-sync-log',
       [self::class, 'render_log']
@@ -118,8 +118,8 @@ final class Settings {
 
     add_submenu_page(
       'firewall-sync-settings',
-      __('Manual IP Block', 'greyrock-wordfence-cloudflare-synchroniser'),
-      __('Manual IP Block', 'greyrock-wordfence-cloudflare-synchroniser'),
+      __('Manual IP Block', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      __('Manual IP Block', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'manage_options',
       'firewall-manual-block',
       [self::class, 'render_manual_block']
@@ -132,8 +132,8 @@ final class Settings {
     }
 
     add_menu_page(
-      __('Greyrock Synchroniser', 'greyrock-wordfence-cloudflare-synchroniser'),
-      __('Greyrock Synchroniser', 'greyrock-wordfence-cloudflare-synchroniser'),
+      __('Grey Rock Synchroniser', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      __('Grey Rock Synchroniser', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'manage_network_options',
       'firewall-sync-settings',
       [self::class, 'render_settings'],
@@ -143,8 +143,8 @@ final class Settings {
 
     add_submenu_page(
       'firewall-sync-settings',
-      __('Synchronisation Log', 'greyrock-wordfence-cloudflare-synchroniser'),
-      __('Synchronisation Log', 'greyrock-wordfence-cloudflare-synchroniser'),
+      __('Synchronisation Log', 'grey-rock-wordfence-cloudflare-synchroniser'),
+      __('Synchronisation Log', 'grey-rock-wordfence-cloudflare-synchroniser'),
       'manage_network_options',
       'firewall-sync-network-log',
       [self::class, 'render_network_log']
@@ -173,7 +173,7 @@ final class Settings {
       wp_die(
         esc_html__(
           'You do not have permission to view the network synchronisation log.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         )
       );
     }
@@ -220,7 +220,7 @@ final class Settings {
         <?php
         echo esc_html__(
           'Network Synchronisation Log',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         );
         ?>
       </h1>
@@ -228,8 +228,8 @@ final class Settings {
       <p>
         <?php
         echo esc_html__(
-          'This page combines the most recent site-specific Greyrock synchronisation records from across the multisite network.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'This page combines the most recent site-specific Grey Rock synchronisation records from across the multisite network.',
+          'grey-rock-wordfence-cloudflare-synchroniser'
         );
         ?>
       </p>
@@ -239,7 +239,7 @@ final class Settings {
           <?php
           echo esc_html__(
             'No synchronisation records were found.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           );
           ?>
         </p>
@@ -251,7 +251,7 @@ final class Settings {
                 <?php
                 echo esc_html__(
                   'Site',
-                  'greyrock-wordfence-cloudflare-synchroniser'
+                  'grey-rock-wordfence-cloudflare-synchroniser'
                 );
                 ?>
               </th>
@@ -259,7 +259,7 @@ final class Settings {
                 <?php
                 echo esc_html__(
                   'IP Address',
-                  'greyrock-wordfence-cloudflare-synchroniser'
+                  'grey-rock-wordfence-cloudflare-synchroniser'
                 );
                 ?>
               </th>
@@ -267,7 +267,7 @@ final class Settings {
                 <?php
                 echo esc_html__(
                   'Reason',
-                  'greyrock-wordfence-cloudflare-synchroniser'
+                  'grey-rock-wordfence-cloudflare-synchroniser'
                 );
                 ?>
               </th>
@@ -275,7 +275,7 @@ final class Settings {
                 <?php
                 echo esc_html__(
                   'Recorded',
-                  'greyrock-wordfence-cloudflare-synchroniser'
+                  'grey-rock-wordfence-cloudflare-synchroniser'
                 );
                 ?>
               </th>
@@ -316,8 +316,8 @@ final class Settings {
     if (is_network_admin()) {
       wp_die(
         esc_html__(
-          'Block logs are site-specific. Open Greyrock Synchroniser within an individual site.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'Block logs are site-specific. Open Grey Rock Synchroniser within an individual site.',
+          'grey-rock-wordfence-cloudflare-synchroniser'
         )
       );
     }
@@ -326,7 +326,7 @@ final class Settings {
     $log_table->prepare_items();
     ?>
     <div class="wrap">
-      <h1><?php echo esc_html(__('Greyrock Synchronisation Log', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h1>
+      <h1><?php echo esc_html(__('Grey Rock Synchronisation Log', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h1>
       <?php $log_table->display(); ?>
     </div>
     <?php
@@ -339,7 +339,7 @@ final class Settings {
       wp_die(
         esc_html__(
           'You do not have permission to administer network firewall settings.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         )
       );
     }
@@ -348,7 +348,7 @@ final class Settings {
       wp_die(
         esc_html__(
           'You do not have permission to administer firewall settings.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         )
       );
     }
@@ -365,7 +365,7 @@ final class Settings {
           <?php
           echo esc_html__(
             'These settings are the network defaults. Individual sites may inherit them or use site-specific settings when overrides are permitted.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           );
           ?>
         </p>
@@ -375,7 +375,7 @@ final class Settings {
             <?php
             echo esc_html__(
               'This site inherits its Cloudflare configuration from Network Admin. Synchronization adds Wordfence blocks to the shared destination. Cleanup and reconciliation are unavailable because another site may still require the same Cloudflare entry.',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             );
             ?>
           </p>
@@ -390,14 +390,14 @@ final class Settings {
         <input type="hidden" name="firewall_sync_scope" value="<?php echo esc_attr($scope); ?>">
 
         <?php do_settings_sections('firewall-sync-settings'); ?>
-        <?php submit_button(__('Save Settings', 'greyrock-wordfence-cloudflare-synchroniser')); ?>
+        <?php submit_button(__('Save Settings', 'grey-rock-wordfence-cloudflare-synchroniser')); ?>
       </form>
 
       <?php self::render_mode_visibility_script(); ?>
 
       <hr>
 
-      <h2><?php echo esc_html(__('Cloudflare Tests', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h2>
+      <h2><?php echo esc_html(__('Cloudflare Tests', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h2>
 
       <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="firewall-sync-form">
         <?php wp_nonce_field('firewall_sync_validate_cf_credentials', 'firewall_sync_validate_cf_credentials_nonce'); ?>
@@ -405,7 +405,7 @@ final class Settings {
         <input type="hidden" name="firewall_sync_scope" value="<?php echo esc_attr($scope); ?>">
         <?php
         submit_button(
-          __('Validate Saved Cloudflare Configuration', 'greyrock-wordfence-cloudflare-synchroniser'),
+          __('Validate Saved Cloudflare Configuration', 'grey-rock-wordfence-cloudflare-synchroniser'),
           'secondary',
           'submit',
           false
@@ -420,7 +420,7 @@ final class Settings {
 
         <p>
           <label for="firewall_sync_test_ip">
-            <strong><?php echo esc_html(__('Test IP address', 'greyrock-wordfence-cloudflare-synchroniser')); ?></strong>
+            <strong><?php echo esc_html(__('Test IP address', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></strong>
           </label>
         </p>
 
@@ -438,14 +438,14 @@ final class Settings {
           <?php
           echo esc_html__(
             'The plugin will add this address to Cloudflare and immediately attempt to remove it.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           );
           ?>
         </p>
 
         <?php
         submit_button(
-          __('Run Test Block', 'greyrock-wordfence-cloudflare-synchroniser'),
+          __('Run Test Block', 'grey-rock-wordfence-cloudflare-synchroniser'),
           'secondary',
           'submit',
           false
@@ -463,7 +463,7 @@ final class Settings {
             <?php
             echo esc_html__(
               'Network Actions',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             );
             ?>
           </h2>
@@ -472,7 +472,7 @@ final class Settings {
             <?php
             echo esc_html__(
               'Synchronize every site that currently inherits the Network Admin configuration. Sites using independent site-specific settings are not included.',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             );
             ?>
           </p>
@@ -499,7 +499,7 @@ final class Settings {
             submit_button(
               __(
                 'Synchronise Network Now',
-                'greyrock-wordfence-cloudflare-synchroniser'
+                'grey-rock-wordfence-cloudflare-synchroniser'
               ),
               'primary',
               'submit',
@@ -518,21 +518,21 @@ final class Settings {
             get_option('date_format') . ' ' . get_option('time_format'),
             strtotime((string) $last_sync)
           )
-          : __('Never', 'greyrock-wordfence-cloudflare-synchroniser');
+          : __('Never', 'grey-rock-wordfence-cloudflare-synchroniser');
         ?>
 
         <hr>
 
-        <h2><?php echo esc_html(__('Last Sync Time', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h2>
+        <h2><?php echo esc_html(__('Last Sync Time', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h2>
         <p><?php echo esc_html($last_sync_time); ?></p>
 
         <div class="firewall-sync-actions">
-          <h2><?php echo esc_html(__('Site Actions', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h2>
+          <h2><?php echo esc_html(__('Site Actions', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h2>
 
           <?php
           self::render_action_button(
             'firewall_sync_now',
-            __('Sync Now', 'greyrock-wordfence-cloudflare-synchroniser'),
+            __('Sync Now', 'grey-rock-wordfence-cloudflare-synchroniser'),
             'primary',
             $sync_disabled
           );
@@ -540,12 +540,12 @@ final class Settings {
           if (!is_multisite() || !Config::uses_network_options()) {
             self::render_action_button(
               'firewall_sync_cleanup_now',
-              __('Run Cleanup Now', 'greyrock-wordfence-cloudflare-synchroniser')
+              __('Run Cleanup Now', 'grey-rock-wordfence-cloudflare-synchroniser')
             );
 
             self::render_action_button(
               'firewall_sync_reconcile',
-              __('Run Reconciliation Now', 'greyrock-wordfence-cloudflare-synchroniser')
+              __('Run Reconciliation Now', 'grey-rock-wordfence-cloudflare-synchroniser')
             );
           }
           ?>
@@ -556,26 +556,26 @@ final class Settings {
         <?php if (is_array($result)): ?>
           <?php delete_transient('firewall_sync_reconcile_result'); ?>
 
-          <h2><?php echo esc_html(__('Reconciliation Results', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h2>
+          <h2><?php echo esc_html(__('Reconciliation Results', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h2>
 
           <?php if (empty($result['missing_in_cf']) && empty($result['orphaned_in_cf'])): ?>
             <p>
               <?php
               echo esc_html__(
                 'Reconciliation completed with no differences.',
-                'greyrock-wordfence-cloudflare-synchroniser'
+                'grey-rock-wordfence-cloudflare-synchroniser'
               );
               ?>
             </p>
           <?php else: ?>
-            <h3><?php echo esc_html(__('Missing in Cloudflare', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h3>
+            <h3><?php echo esc_html(__('Missing in Cloudflare', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h3>
             <ul>
               <?php foreach ($result['missing_in_cf'] ?? [] as $ip): ?>
                 <li><?php echo esc_html((string) $ip); ?></li>
               <?php endforeach; ?>
             </ul>
 
-            <h3><?php echo esc_html(__('Orphaned in Cloudflare', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h3>
+            <h3><?php echo esc_html(__('Orphaned in Cloudflare', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h3>
             <ul>
               <?php foreach ($result['orphaned_in_cf'] ?? [] as $ip): ?>
                 <li><?php echo esc_html((string) $ip); ?></li>
@@ -599,7 +599,7 @@ final class Settings {
         <?php
         echo esc_html__(
           'Manual Account List Management',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         );
         ?>
       </h2>
@@ -608,7 +608,7 @@ final class Settings {
         <?php
         echo esc_html__(
           'Add or remove an IPv4 or IPv6 address from the configured Cloudflare account list. Manually added addresses remain in the list until they are removed.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         );
         ?>
       </p>
@@ -642,7 +642,7 @@ final class Settings {
               <?php
               echo esc_html__(
                 'IP address',
-                'greyrock-wordfence-cloudflare-synchroniser'
+                'grey-rock-wordfence-cloudflare-synchroniser'
               );
               ?>
             </strong>
@@ -665,7 +665,7 @@ final class Settings {
               <?php
               echo esc_html__(
                 'Reason',
-                'greyrock-wordfence-cloudflare-synchroniser'
+                'grey-rock-wordfence-cloudflare-synchroniser'
               );
               ?>
             </strong>
@@ -686,7 +686,7 @@ final class Settings {
           <?php
           echo esc_html__(
             'Required when adding an address. The reason is stored with the Cloudflare list item. It is not required when removing an address.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           );
           ?>
         </p>
@@ -701,7 +701,7 @@ final class Settings {
             <?php
             echo esc_html__(
               'Add IP Address',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             );
             ?>
           </button>
@@ -715,7 +715,7 @@ final class Settings {
             <?php
             echo esc_html__(
               'Remove IP Address',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             );
             ?>
           </button>
@@ -795,14 +795,14 @@ final class Settings {
       <h2>
         <?php echo esc_html__(
           'Cloudflare Setup Guide',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ); ?>
       </h2>
 
       <p>
         <?php echo esc_html__(
           'Complete these steps before relying on synchronisation. The plugin cannot create the account-list security rule for each domain.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'grey-rock-wordfence-cloudflare-synchroniser'
         ); ?>
       </p>
 
@@ -810,31 +810,31 @@ final class Settings {
         <li>
           <?php echo esc_html__(
             'Choose Zone Access Rules for one zone or Account IP List for a reusable list.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </li>
         <li>
           <?php echo esc_html__(
             'Create a restricted Cloudflare API token with the permissions shown below.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </li>
         <li>
           <?php echo esc_html__(
             'Enter the required identifiers and save the settings.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </li>
         <li>
           <?php echo esc_html__(
             'Validate the saved configuration and run a test block.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </li>
         <li>
           <?php echo esc_html__(
             'For Account IP List mode, create a Block Custom Rule in every Cloudflare zone that should use the list.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </li>
       </ol>
@@ -844,7 +844,7 @@ final class Settings {
           <h3>
             <?php echo esc_html__(
               'Zone Access Rules mode',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             ); ?>
           </h3>
 
@@ -856,7 +856,7 @@ final class Settings {
           <p>
             <?php echo esc_html__(
               'Required setting: Cloudflare Zone ID.',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             ); ?>
           </p>
         </section>
@@ -865,7 +865,7 @@ final class Settings {
           <h3>
             <?php echo esc_html__(
               'Account IP List mode',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             ); ?>
           </h3>
 
@@ -876,7 +876,7 @@ final class Settings {
           <p>
             <?php echo esc_html__(
               'Required settings: Account ID and List Name. The plugin finds the hidden internal List ID automatically. Cloudflare Free accounts permit one custom list; the recommended name is wordfence_hot_blocklist.',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             ); ?>
           </p>
         </section>
@@ -887,7 +887,7 @@ final class Settings {
           <strong>
             <?php echo esc_html__(
               'Account IP Lists do not block traffic by themselves.',
-              'greyrock-wordfence-cloudflare-synchroniser'
+              'grey-rock-wordfence-cloudflare-synchroniser'
             ); ?>
           </strong>
         </p>
@@ -895,7 +895,7 @@ final class Settings {
         <p>
           <?php echo esc_html__(
             'Create a Cloudflare Custom Rule with the Block action:',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </p>
 
@@ -904,7 +904,7 @@ final class Settings {
         <p>
           <?php echo esc_html__(
             'To apply the list to one hostname only:',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </p>
 
@@ -915,7 +915,7 @@ final class Settings {
         <p>
           <?php echo esc_html__(
             'Enter the List Name in this plugin without the dollar sign. Use the dollar sign only in the Cloudflare rule expression.',
-            'greyrock-wordfence-cloudflare-synchroniser'
+            'grey-rock-wordfence-cloudflare-synchroniser'
           ); ?>
         </p>
       </div>
@@ -942,14 +942,14 @@ final class Settings {
     if (is_network_admin()) {
       wp_die(
         esc_html__(
-          'Manual blocks are site-specific. Open Greyrock Synchroniser within an individual site.',
-          'greyrock-wordfence-cloudflare-synchroniser'
+          'Manual blocks are site-specific. Open Grey Rock Synchroniser within an individual site.',
+          'grey-rock-wordfence-cloudflare-synchroniser'
         )
       );
     }
     ?>
     <div class="wrap">
-      <h1><?php echo esc_html(__('Manually Block an IP Address', 'greyrock-wordfence-cloudflare-synchroniser')); ?></h1>
+      <h1><?php echo esc_html(__('Manually Block an IP Address', 'grey-rock-wordfence-cloudflare-synchroniser')); ?></h1>
 
       <?php settings_errors('firewall_sync_manual_block'); ?>
 
@@ -962,7 +962,7 @@ final class Settings {
           <tr>
             <th scope="row">
               <label for="manual_ip">
-                <?php echo esc_html(__('IP Address', 'greyrock-wordfence-cloudflare-synchroniser')); ?>
+                <?php echo esc_html(__('IP Address', 'grey-rock-wordfence-cloudflare-synchroniser')); ?>
               </label>
             </th>
             <td>
@@ -972,7 +972,7 @@ final class Settings {
           <tr>
             <th scope="row">
               <label for="manual_reason">
-                <?php echo esc_html(__('Reason', 'greyrock-wordfence-cloudflare-synchroniser')); ?>
+                <?php echo esc_html(__('Reason', 'grey-rock-wordfence-cloudflare-synchroniser')); ?>
               </label>
             </th>
             <td>
@@ -981,7 +981,7 @@ final class Settings {
           </tr>
         </table>
 
-        <?php submit_button(__('Block IP', 'greyrock-wordfence-cloudflare-synchroniser')); ?>
+        <?php submit_button(__('Block IP', 'grey-rock-wordfence-cloudflare-synchroniser')); ?>
       </form>
     </div>
     <?php

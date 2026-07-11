@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync\Services;
 
+
+/*
+ * Direct database access is intentional in this repository class.
+ * It owns a dedicated plugin table and must return current log data.
+ *
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
+ * phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+ * phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+ */
 final class BlockLogger {
   public const TABLE = 'wpcf_sync_blocks';
   public const MAX_FAILURES = 3;

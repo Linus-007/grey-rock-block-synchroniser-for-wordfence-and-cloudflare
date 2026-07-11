@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the current release of Greyrock Wordfence-Cloudflare Synchroniser.
+Security fixes are provided for the current release of Grey Rock Wordfence-Cloudflare Synchroniser.
 
 | Version | Supported |
 |---|---|
