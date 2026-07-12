@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.1.9
+Stable tag: 1.1.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -182,8 +182,8 @@ Required Cloudflare token permissions:
 
 Required settings:
 
-* Cloudflare API Token
 * Cloudflare Account ID
+* Cloudflare API Token
 * Cloudflare List Name
 
 Required Cloudflare token permission:
@@ -241,6 +241,15 @@ No. Review and remove unwanted Cloudflare rules or list entries separately after
 No.
 
 == Changelog ==
+
+= 1.1.10 =
+
+* Moved Cloudflare Account ID before Cloudflare API Token.
+* Left-aligned the Cloudflare Tests controls.
+* Moved Validate Saved Cloudflare Configuration above the test IP field.
+* Moved Run Test Block directly below the test IP field.
+* Updated documentation to match the administration interface.
+
 
 = 1.1.9 =
 

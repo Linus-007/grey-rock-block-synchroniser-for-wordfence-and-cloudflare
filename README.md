@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.1.9-blue)
+![Version](https://img.shields.io/badge/version-1.1.10-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-7.0.1-tested-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -296,8 +296,9 @@ Network Admin → Firewall Sync
 Complete the setup in this order:
 
 1. Select **Zone Access Rules** or **Account IP List**.
-2. Paste the restricted Cloudflare API token.
-3. Enter the identifiers required by the selected mode.
+2. Enter the Cloudflare Account ID when using Account IP List mode.
+3. Paste the restricted Cloudflare API token.
+4. Enter any remaining identifiers required by the selected mode.
 4. In Account IP List mode, enter the actual Cloudflare List Name.
 5. Select the synchronisation interval.
 6. Save the settings.
