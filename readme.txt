@@ -4,15 +4,25 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.1.10
+Stable tag: 1.1.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Synchronises current and historical Wordfence firewall blocks with Cloudflare.
+Make your WordPress site boring to repeat attackers by synchronising qualifying Wordfence firewall blocks with Cloudflare.
 
 == Description ==
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare sends qualifying Wordfence firewall blocks to Cloudflare so hostile traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
+
+= Why Grey Rock? =
+
+The name Grey Rock is inspired by the grey rock method: becoming uninteresting and unrewarding to someone seeking attention or a reaction.
+
+Grey Rock applies that concept to hostile website traffic. Wordfence identifies qualifying blocked IP addresses, and Grey Rock synchronises them with Cloudflare. Cloudflare can then stop those addresses at the network edge before their requests reach WordPress.
+
+The objective is simple: make your website boring to repeat attackers. Instead of allowing the same hostile traffic to keep reaching the server, Grey Rock helps the site respond with less exposure, less interaction and fewer consumed server resources.
+
+Grey Rock does not replace Wordfence, Cloudflare or a layered security program. It connects them so qualifying Wordfence blocks can be enforced earlier, closer to the source of the traffic.
 
 The plugin supports two Cloudflare destinations.
 
@@ -240,7 +250,22 @@ No. Review and remove unwanted Cloudflare rules or list entries separately after
 
 No.
 
+== Screenshots ==
+
+1. Configure Cloudflare Account IP List mode, synchronisation interval, historical WAF lookback, and block threshold from Network Admin.
+2. Validate the Cloudflare configuration, test blocking, manage list entries manually, and synchronise the multisite network.
+3. Review recent site-specific synchronisation activity across the WordPress multisite network.
+4. View the Cloudflare Account IP List created and maintained by Grey Rock Block Synchroniser.
+5. Review synchronised and manually managed IP addresses stored in the configured Cloudflare list.
+6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
+
 == Changelog ==
+
+= 1.1.11 =
+
+* Added a Why Grey Rock explanation to the plugin directory description.
+* Updated the short description to explain the goal of making the site less rewarding to repeat attackers.
+* Added six screenshot captions for the WordPress.org Plugin Directory.
 
 = 1.1.10 =
 
