@@ -1,0 +1,85 @@
+name: greyrock-plugin-test
+
+services:
+  db:
+    image: mariadb:11.8
+    container_name: greyrock-plugin-test-db
+    restart: "no"
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
+      MARIADB_ROOT_PASSWORD: "${TEST_DB_ROOT_PASSWORD:?TEST_DB_ROOT_PASSWORD is required}"
+    healthcheck:
+      test:
+        - CMD
+        - healthcheck.sh
+        - --connect
+        - --innodb_initialized
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    volumes:
+      - database-data:/var/lib/mysql
+    networks:
+      - test-network
+
+  wordpress:
+    image: wordpress:7.0.1-php8.3-apache
+    container_name: greyrock-plugin-test-wordpress
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18080:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
+      WORDPRESS_DEBUG: "1"
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_ENVIRONMENT_TYPE', 'local');
+        define('WP_DEBUG_LOG', true);
+        define('WP_DEBUG_DISPLAY', false);
+        define('DISALLOW_FILE_EDIT', true);
+        define('AUTOMATIC_UPDATER_DISABLED', true);
+        define('WP_AUTO_UPDATE_CORE', false);
+    volumes:
+      - wordpress-data:/var/www/html
+    networks:
+      - test-network
+
+  cli:
+    image: wordpress:cli-2.12.0-php8.3
+    container_name: greyrock-plugin-test-cli
+    user: "33:33"
+    entrypoint:
+      - wp
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOME: /tmp
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
+    volumes:
+      - wordpress-data:/var/www/html
+      - type: bind
+        source: "${PLUGIN_ZIP:?PLUGIN_ZIP is required}"
+        target: /artifacts/greyrock-plugin.zip
+        read_only: true
+    networks:
+      - test-network
+
+volumes:
+  database-data:
+  wordpress-data:
+
+networks:
+  test-network:
+    driver: bridge
