@@ -9,6 +9,7 @@ use WPCF\FirewallSync\Config;
 use WPCF\FirewallSync\Plugin;
 use WPCF\FirewallSync\Services\BlockLogger;
 use WPCF\FirewallSync\Services\IpValidator;
+use WPCF\FirewallSync\Services\DnsAllowList;
 use WPCF\FirewallSync\Services\Reconciler;
 use WPCF\FirewallSync\Services\SyncScheduler;
 use WPCF\FirewallSync\Services\NetworkSynchronizer;
@@ -104,6 +105,8 @@ final class Fields {
       __('Cloudflare Zone ID', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
       __('Required for Zone Access Rules mode', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
     );
+
+    self::add_ddns_allow_list_fields();
 
     self::add_scheduling_method_field();
 
@@ -266,6 +269,155 @@ final class Fields {
           echo esc_html($descriptions[$name]);
           echo '</p>';
         }
+      },
+      'firewall-sync-settings',
+      'firewall_sync_main_section'
+    );
+  }
+
+
+  private static function add_ddns_allow_list_fields(): void {
+    add_settings_field(
+      'ddns_hostname',
+      __(
+        'DDNS domain',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      ),
+      static function (): void {
+        $options = Config::get_admin_options();
+        $hostname = (string) (
+          $options['ddns_hostname'] ?? ''
+        );
+        $disabled = self::configuration_fields_disabled();
+        $state = DnsAllowList::get_admin_state();
+
+        printf(
+          '<input type="text" id="ddns_hostname" name="firewall_sync_options[ddns_hostname]" value="%1$s" placeholder="%2$s" class="regular-text" autocomplete="off"%3$s>',
+          esc_attr($hostname),
+          esc_attr('admin.example.com'),
+          disabled($disabled, true, false)
+        );
+
+        echo '<p class="description">';
+        echo esc_html__(
+          'Enter a hostname only, such as admin.example.com. The hostname must resolve directly to the administrator’s public address. If Cloudflare hosts the record, set the dedicated DDNS hostname to DNS only; do not use a proxied hostname. Do not enter a URL, path or port. Grey Rock does not create or update DDNS records and does not need DNS editing permission.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        echo '</p>';
+
+        echo '<p><strong>';
+        echo esc_html__(
+          'Resolved addresses:',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        echo '</strong> ';
+
+        if (!empty($state['ips'])) {
+          foreach ($state['ips'] as $index => $ip) {
+            if ($index > 0) {
+              echo ' ';
+            }
+
+            echo '<code>';
+            echo esc_html((string) $ip);
+            echo '</code>';
+          }
+        } else {
+          echo esc_html__(
+            'No successful public-address lookup is stored.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+        }
+
+        echo '</p>';
+
+        if ((int) $state['resolved_at'] > 0) {
+          $date_format = (string) get_option(
+            'date_format'
+          );
+          $time_format = (string) get_option(
+            'time_format'
+          );
+
+          echo '<p><strong>';
+          echo esc_html__(
+            'Last successful lookup:',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+          echo '</strong> ';
+          echo esc_html(
+            wp_date(
+              trim($date_format . ' ' . $time_format),
+              (int) $state['resolved_at']
+            )
+          );
+          echo '</p>';
+        }
+
+        if ($state['status'] === 'stale') {
+          echo '<p class="description">';
+          echo esc_html__(
+            'The latest lookup failed. The last successful addresses remain available for up to 24 hours.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+          echo '</p>';
+        } elseif ($state['status'] === 'failed') {
+          echo '<p class="description">';
+          echo esc_html(
+            (string) $state['error']
+          );
+          echo '</p>';
+        }
+
+        printf(
+          '<p><button type="submit" class="button"%1$s>%2$s</button></p>',
+          disabled($disabled, true, false),
+          esc_html__(
+            'Save settings and resolve now',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          )
+        );
+      },
+      'firewall-sync-settings',
+      'firewall_sync_main_section'
+    );
+
+    add_settings_field(
+      'ddns_allow_enabled',
+      __(
+        'Administrator allow list',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      ),
+      static function (): void {
+        $options = Config::get_admin_options();
+        $enabled = !empty(
+          $options['ddns_allow_enabled']
+        );
+        $disabled = self::configuration_fields_disabled();
+
+        printf(
+          '<label><input type="checkbox" id="ddns_allow_enabled" name="firewall_sync_options[ddns_allow_enabled]" value="1"%1$s%2$s> %3$s</label>',
+          checked($enabled, true, false),
+          disabled($disabled, true, false),
+          esc_html__(
+            'Exclude the currently resolved public addresses from future Grey Rock block synchronization.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          )
+        );
+
+        echo '<p class="description">';
+        echo esc_html__(
+          'This creates a local Grey Rock allow-list entry. At the next synchronisation, Grey Rock automatically removes the resolved addresses from its configured Cloudflare block destination and clears the related local synchronisation records. No separate Cloudflare allow rule or list is created.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        echo '</p>';
+
+        echo '<p class="description">';
+        echo esc_html__(
+          'IPv4 and IPv6 addresses are stored exactly as resolved and are never widened to a network range.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        echo '</p>';
       },
       'firewall-sync-settings',
       'firewall_sync_main_section'
@@ -484,10 +636,16 @@ final class Fields {
       );
     }
 
+    $input['ddns_allow_enabled'] =
+      !empty($input['ddns_allow_enabled'])
+        ? '1'
+        : '0';
+
     if ($scope === 'network') {
       self::require_network_capability();
 
       Config::update_network_options($input);
+      DnsAllowList::refresh_scope('network');
       self::reschedule_network_inheriting_sites();
 
       self::redirect_with_message(
@@ -504,6 +662,7 @@ final class Fields {
     }
 
     Config::update_site_options($input);
+    DnsAllowList::refresh_scope('site');
     SyncScheduler::reschedule();
 
     self::redirect_with_message(

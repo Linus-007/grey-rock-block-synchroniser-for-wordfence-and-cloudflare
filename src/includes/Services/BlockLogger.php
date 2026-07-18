@@ -209,6 +209,23 @@ final class BlockLogger {
   }
 
   /**
+   * Remove the synchronization record for an exact IP address.
+   *
+   * An absent record is already the required final state.
+   */
+  public static function remove(string $ip): bool {
+    global $wpdb;
+
+    $table = $wpdb->prefix . self::TABLE;
+
+    return $wpdb->delete(
+      $table,
+      ['ip' => $ip],
+      ['%s']
+    ) !== false;
+  }
+
+  /**
    * Normalise text stored in the synchronization-state table.
    */
   private static function normalize_reason(string $reason): string {

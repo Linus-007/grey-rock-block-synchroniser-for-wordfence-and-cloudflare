@@ -479,6 +479,23 @@ final class SyncScheduler {
       $list_id = $resolved_list_id;
     }
 
+    $allowed_ips = array_fill_keys(
+      DnsAllowList::get_effective_allowed_ips(),
+      true
+    );
+
+    if (
+      !self::remove_allowed_ips_from_cloudflare(
+        $client,
+        $mode,
+        $account_id,
+        $list_id,
+        array_keys($allowed_ips)
+      )
+    ) {
+      return false;
+    }
+
     /*
      * Wordfence has changed the internal wfBlock API between releases.
      * Active-block retrieval is optional so historical wp_wfhits records
@@ -521,6 +538,7 @@ final class SyncScheduler {
           && $expiration > 0
           && time() > $expiration
         )
+        || isset($allowed_ips[$ip])
         || BlockLogger::has_synced($ip)
         || BlockLogger::is_blacklisted($ip)
       ) {
@@ -569,6 +587,7 @@ final class SyncScheduler {
       if (
         $ip === ''
         || isset($batch_by_ip[$ip])
+        || isset($allowed_ips[$ip])
         || BlockLogger::has_synced($ip)
         || BlockLogger::is_blacklisted($ip)
       ) {
@@ -668,6 +687,100 @@ final class SyncScheduler {
     }
 
     return true;
+  }
+
+  /**
+   * Remove exact trusted addresses from the configured Cloudflare
+   * block destination before processing new block candidates.
+   *
+   * @param array<int, string> $allowed_ips Exact public addresses.
+   */
+  private static function remove_allowed_ips_from_cloudflare(
+    Client $client,
+    string $mode,
+    string $account_id,
+    string $list_id,
+    array $allowed_ips
+  ): bool {
+    foreach ($allowed_ips as $ip) {
+      if (!IpValidator::validate_public_ip($ip)) {
+        continue;
+      }
+
+      $removed = $mode === 'account_list'
+        ? $client->remove_ip_from_account_list(
+          $account_id,
+          $list_id,
+          $ip
+        )
+        : $client->delete_block($ip);
+
+      if (!$removed) {
+        $client_error = $client->get_last_error_message();
+
+        self::$lastErrorMessage = $client_error !== ''
+          ? $client_error
+          : sprintf(
+            /* translators: %s: trusted IP address. */
+            __(
+              'Trusted address %s could not be removed from the Cloudflare block destination.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            $ip
+          );
+
+        return false;
+      }
+
+      if (!self::remove_allowed_ip_from_logs($ip)) {
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: trusted IP address. */
+          __(
+            'Cloudflare removed trusted address %s, but Grey Rock could not clear its local synchronization record.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          $ip
+        );
+
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Clear local synchronization records for a trusted address.
+   *
+   * Network configuration is shared by every inheriting site.
+   * All site-local records must therefore be removed when the
+   * shared allow-list entry becomes effective.
+   */
+  private static function remove_allowed_ip_from_logs(
+    string $ip
+  ): bool {
+    if (
+      !is_multisite()
+      || !Config::uses_network_options()
+    ) {
+      return BlockLogger::remove($ip);
+    }
+
+    $removed = true;
+
+    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+      switch_to_blog((int) $blog_id);
+
+      try {
+        if (!BlockLogger::remove($ip)) {
+          $removed = false;
+        }
+      } finally {
+        restore_current_blog();
+      }
+    }
+
+    return $removed;
   }
 
   public static function get_last_error_message(): string {

@@ -36,6 +36,7 @@ function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_sit
   delete_option('firewall_sync_last_attempt_timestamp');
   delete_option('firewall_sync_is_running');
   delete_option('firewall_sync_version');
+  delete_option('firewall_sync_ddns_state');
 
   wp_clear_scheduled_hook('firewall_sync_cron_event');
   wp_clear_scheduled_hook('firewall_sync_cleanup_event');
@@ -56,6 +57,7 @@ if (is_multisite()) {
 
   delete_site_option('firewall_sync_network_options');
   delete_site_option('firewall_sync_network_version');
+  delete_site_option('firewall_sync_network_ddns_state');
 } else {
   grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
 }

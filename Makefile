@@ -27,6 +27,7 @@ validate:
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Running static regression checks..."
 	@$(PHP) tests/static/log-ui-regression.php
+	@$(PHP) tests/static/dns-allow-list-regression.php
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^ \* Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare$$' "$(PLUGIN_ENTRY)"

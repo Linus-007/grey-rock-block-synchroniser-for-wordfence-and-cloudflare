@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync;
 
 use WPCF\FirewallSync\Services\CloudflareIdentifierValidator;
+use WPCF\FirewallSync\Services\DnsAllowList;
 
 final class Config {
   public const SITE_OPTION = 'firewall_sync_options';
@@ -147,6 +148,15 @@ final class Config {
           (string) ($input['cloudflare_list_name'] ?? '')
         )
       );
+
+    $output['ddns_hostname'] =
+      DnsAllowList::sanitize_hostname(
+        (string) ($input['ddns_hostname'] ?? '')
+      );
+    $output['ddns_allow_enabled'] =
+      !empty($input['ddns_allow_enabled'])
+        ? '1'
+        : '0';
 
     $schedule_method = (string) (
       $input['schedule_method'] ?? self::SCHEDULER_WP_CRON
@@ -347,6 +357,8 @@ final class Config {
       'cloudflare_list_id',
       'cloudflare_list_name',
       'cloudflare_mode',
+      'ddns_hostname',
+      'ddns_allow_enabled',
       'schedule_method',
       'sync_interval',
       'historical_lookback_hours',

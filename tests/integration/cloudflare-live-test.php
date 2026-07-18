@@ -3,6 +3,8 @@
 
 use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Services\IpValidator;
+use WPCF\FirewallSync\Services\BlockLogger;
+use WPCF\FirewallSync\Services\SyncScheduler;
 
 const EXPECTED_LIST_ID = '7811817676fa4bac90479557ab74ba93';
 const EXPECTED_LIST_NAME = 'wordfence_hot_blocklist';
@@ -224,6 +226,92 @@ try {
 	}
 
 	echo "PASS: Fresh plugin client verified 8.8.8.8 in the list.\n";
+
+  update_option(
+    'firewall_sync_options',
+    [
+      'cloudflare_api_token' => $token,
+      'cloudflare_mode' => 'account_list',
+      'cloudflare_account_id' => $accountId,
+      'cloudflare_list_id' => $listId,
+      'cloudflare_list_name' => $listName,
+      'ddns_hostname' => 'trusted-test.invalid',
+      'ddns_allow_enabled' => '1',
+      'historical_lookback_hours' => '24',
+      'historical_minimum_events' => '100',
+    ],
+    false
+  );
+
+  update_option(
+    'firewall_sync_ddns_state',
+    [
+      'hostname' => 'trusted-test.invalid',
+      'ips' => [$testIp],
+      'resolved_at' => time(),
+      'last_attempt' => time(),
+      'status' => 'resolved',
+      'error' => '',
+    ],
+    false
+  );
+
+  BlockLogger::log(
+    $testIp,
+    'live test: trusted address awaiting removal'
+  );
+
+  if (!BlockLogger::has_synced($testIp)) {
+    throw new RuntimeException(
+      'The live test could not create the local synchronization record.'
+    );
+  }
+
+  if (!SyncScheduler::run_now()) {
+    $error = SyncScheduler::get_last_error_message();
+
+    throw new RuntimeException(
+      $error !== ''
+        ? $error
+        : 'Automatic trusted-address removal failed.'
+    );
+  }
+
+  $automaticRemovalVerified = false;
+
+  for ($attempt = 1; $attempt <= 30; $attempt++) {
+    if (
+      !contains_ip(
+        $token,
+        $accountId,
+        $listId,
+        $testIp
+      )
+    ) {
+      $automaticRemovalVerified = true;
+      $removeVerified = true;
+      break;
+    }
+
+    if ($attempt < 30) {
+      sleep(2);
+    }
+  }
+
+  if (!$automaticRemovalVerified) {
+    throw new RuntimeException(
+      'Grey Rock did not automatically remove 8.8.8.8 from the Cloudflare block list.'
+    );
+  }
+
+  if (BlockLogger::has_synced($testIp)) {
+    throw new RuntimeException(
+      'Grey Rock retained the local synchronization record for the trusted address.'
+    );
+  }
+
+  echo "PASS: Grey Rock automatically removed 8.8.8.8 after it became a trusted address.\n";
+
 } catch (Throwable $error) {
 	$primaryError = $error->getMessage();
 } finally {

@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.2.2
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -65,6 +65,72 @@ Historical synchronisation is configurable:
 Repeated events from the same address are deduplicated before synchronisation.
 
 Invalid, private and reserved IP addresses are rejected during historical-event processing.
+
+= DDNS-resolved administrator allow list =
+
+The optional administrator allow list is intended for administrators
+whose public address changes and is already maintained by a DDNS
+provider.
+
+Enter a hostname only, for example:
+
+`admin.example.com`
+
+Do not enter a URL, path or port.
+
+Grey Rock does not create or update DNS records. It also does not provide a DDNS service or require DNS editing permission.
+
+If Cloudflare hosts the DDNS record, configure the dedicated hostname
+as DNS only. A proxied hostname returns Cloudflare proxy addresses
+instead of the administrator's actual public address.
+
+Grey Rock resolves public A and AAAA records. Private, loopback,
+link-local, reserved and invalid addresses are rejected. Multiple valid
+public results are displayed and handled separately.
+
+Configuration procedure:
+
+1. Confirm that the DDNS hostname returns the administrator's current
+   public address.
+2. Enter the hostname in **DDNS domain**.
+3. Select **Save settings and resolve now**.
+4. Confirm the read-only **Resolved addresses** values.
+5. Select **Administrator allow list**.
+6. Save the settings.
+7. Run synchronisation or wait for the next scheduled run.
+
+When enabled, the resolved addresses are excluded from current and
+historical Wordfence candidates.
+
+During synchronisation, Grey Rock removes those addresses from the
+configured Cloudflare Account IP List or Zone Access Rules destination.
+Related local synchronisation records are cleared only after
+Cloudflare confirms the required final state.
+
+A failed Cloudflare removal causes the synchronisation to fail so a
+later run can retry.
+
+Grey Rock refreshes the lookup when settings are saved and before
+synchronisation when the previous attempt is at least five minutes old.
+
+A temporary DNS failure retains the last successful addresses for up
+to 24 hours. After that period, no stored address remains effective
+until resolution succeeds.
+
+A successful lookup replaces the old address set. Previous addresses
+are no longer trusted after DNS returns a different set.
+
+IPv4 and IPv6 addresses remain exact individual addresses. Grey Rock
+does not expand IPv6 addresses to `/64` and does not create inferred
+CIDR allow-list entries.
+
+In multisite, Network Admin may provide one shared DDNS hostname for
+all inheriting sites. Site-specific configurations may use a separate
+hostname.
+
+A DNS-only DDNS hostname exposes its current public address through
+DNS. Use a dedicated non-web hostname and consider that disclosure
+before enabling the feature.
 
 = Scheduling =
 
@@ -148,6 +214,7 @@ This plugin connects to the Cloudflare API when an administrator:
 * Manually adds or removes an IP address.
 * Runs synchronisation, cleanup or reconciliation.
 * Allows a WP-Cron or external-scheduler synchronization, or an hourly cleanup event, to run.
+* Resolves a configured DDNS hostname through the WordPress server's DNS resolver.
 
 The Cloudflare API is required because the plugin's purpose is to create and remove Cloudflare firewall entries.
 
@@ -164,6 +231,8 @@ Depending on the configured mode and operation, the plugin sends some or all of 
 The plugin retrieves Cloudflare account lists, list items and firewall access rules so it can validate settings, avoid duplicates, reconcile state and remove entries.
 
 Communication is sent directly from the WordPress server to Cloudflare over HTTPS using the WordPress HTTP API.
+
+DDNS lookups use the DNS resolver configured for the WordPress server. The resolver operator may receive the queried hostname and ordinary DNS request metadata. The DNS lookup does not include the Cloudflare API token and does not update the DNS record.
 
 The plugin does not send WordPress post content, user passwords, email addresses or the Cloudflare token to Greyscale Zone. It does not provide Greyscale Zone with telemetry or usage analytics.
 
@@ -186,6 +255,8 @@ https://developers.cloudflare.com/api/
 The plugin stores its configuration in the WordPress database. This includes the Cloudflare API token and Cloudflare identifiers entered by an administrator.
 
 The plugin stores synchronised public IP addresses, block reasons, timestamps, expiration information and retry state in a site-specific WordPress database table.
+
+When DDNS lookup is configured, the plugin also stores the hostname, the most recently accepted public addresses, lookup timestamps, lookup status and a safe error message in WordPress options.
 
 IP addresses may constitute personal data under some privacy laws. Site administrators are responsible for establishing a lawful basis, retention policy and appropriate disclosure for their use of Wordfence, Cloudflare and this plugin.
 
@@ -218,9 +289,11 @@ Uninstalling the plugin removes its local plugin options and tables according to
 11. Enter the List Name without the dollar sign.
 12. Select the scheduling method, interval, historical lookback and event
     threshold.
-13. Save the settings.
-14. Select **Validate Saved Cloudflare Configuration**.
-15. Run a test block using a safe public IP address.
+13. Optionally enter a DNS-only hostname in **DDNS domain**.
+14. Optionally select **Administrator allow list**.
+15. Save the settings and confirm the read-only resolved addresses.
+16. Select **Validate Saved Cloudflare Configuration**.
+17. Run a test block using a safe public IP address.
 
 The token does not need DNS editing permission. Do not use a Global API
 Key.
@@ -263,6 +336,39 @@ Enter the token and Zone ID in Grey Rock. This mode does not use an
 account list or a Custom Rule.
 
 == Frequently Asked Questions ==
+
+= Does Grey Rock update my DDNS record? =
+
+No. The existing DDNS provider remains responsible for updating DNS.
+Grey Rock only reads the hostname's public A and AAAA results.
+
+= Why must a Cloudflare-hosted DDNS hostname be DNS only? =
+
+A proxied hostname returns Cloudflare proxy addresses. Grey Rock needs
+the administrator's actual public address, so the dedicated DDNS
+hostname must be DNS only.
+
+= When is a trusted address removed from Cloudflare? =
+
+Saving the settings performs the DNS lookup. Removal occurs during the
+next synchronisation. The address is also excluded from future current
+and historical Wordfence candidates.
+
+= What happens when DNS temporarily fails? =
+
+The last successful public addresses remain trusted for up to 24
+hours. After that grace period, no stored address remains effective
+until a lookup succeeds.
+
+= What happens when the DDNS address changes? =
+
+A successful lookup replaces the previous address set. The new exact
+addresses become trusted and the old addresses are no longer included
+in the administrator allow list.
+
+= Does Grey Rock create an IPv6 /64 allow-list entry? =
+
+No. Each resolved IPv6 address remains an exact individual address.
 
 = Does the plugin require a Cloudflare Global API Key? =
 
@@ -350,6 +456,16 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.1 =
+
+* Added a DNS-resolved administrator allow list for existing DDNS hostnames.
+* Added read-only public A and AAAA lookup results.
+* Excluded trusted addresses from current and historical Wordfence candidates.
+* Automatically removes trusted addresses from the configured Cloudflare block destination.
+* Clears related local synchronisation records after confirmed removal.
+* Added five-minute refresh control and a 24-hour DNS-failure grace period.
+* Added exact IPv6 handling, multisite support, tests and full user documentation.
 
 = 1.2.2 =
 
@@ -469,6 +585,11 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+Adds DDNS-resolved administrator allow-list protection, automatic removal of
+trusted addresses from Cloudflare block destinations, multisite cleanup and
+exact IPv4 and IPv6 handling.
 
 = 1.2.2 =
 
