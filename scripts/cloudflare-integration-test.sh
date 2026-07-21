@@ -7,7 +7,8 @@ if [[ "$EUID" -ne 0 ]]; then
 	exit 1
 fi
 
-REPO_ROOT="${HOME}/src/security-review/wordfence-cloudflare-firewall-sync"
+GREYROCK_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -- "${GREYROCK_SCRIPT_DIR}/.." && pwd -P)"
 COMPOSE_FILE="$REPO_ROOT/tests/docker/compose.yml"
 PLUGIN_ZIP="$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip"
 PHP_TEST="$REPO_ROOT/tests/integration/cloudflare-live-test.php"

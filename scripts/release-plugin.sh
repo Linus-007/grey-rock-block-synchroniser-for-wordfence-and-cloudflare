@@ -2,8 +2,9 @@
 
 set -Eeuo pipefail
 
-REPO_ROOT="${HOME}/src/security-review/wordfence-cloudflare-firewall-sync"
-RELEASE_CONFIG="${HOME}/.config/greyrock-release/svn.env"
+GREYROCK_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -- "${GREYROCK_SCRIPT_DIR}/.." && pwd -P)"
+RELEASE_CONFIG="${GREYROCK_RELEASE_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/greyrock-release/svn.env}"
 
 EXPECTED_FORK="git@github.com:Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.git"
 EXPECTED_SVN_URL="https://plugins.svn.wordpress.org/grey-rock-block-synchroniser-for-wordfence-and-cloudflare"
