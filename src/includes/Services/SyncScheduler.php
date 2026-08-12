@@ -497,21 +497,14 @@ final class SyncScheduler {
     }
 
     /*
-     * Wordfence has changed the internal wfBlock API between releases.
-     * Active-block retrieval is optional so historical wp_wfhits records
-     * remain available without causing a fatal error.
+     * Wordfence 9 exposes active blocks through wfBlock::ipBlocks(true)
+     * and returns wfBlock objects. Older internal APIs are intentionally
+     * unsupported; failing here prevents a false successful synchronization.
      */
-    $blocks = [];
+    $blocks = self::read_active_wordfence_blocks();
 
-    if (
-      class_exists('\wfBlock')
-      && method_exists('\wfBlock', 'getBlocks')
-    ) {
-      $wordfence_blocks = \wfBlock::getBlocks();
-
-      if (is_array($wordfence_blocks)) {
-        $blocks = $wordfence_blocks;
-      }
+    if ($blocks === null) {
+      return false;
     }
 
     /*
@@ -521,14 +514,18 @@ final class SyncScheduler {
     $batch_by_ip = [];
 
     foreach ($blocks as $block) {
-      $ip = (string) ($block['ip'] ?? '');
-      $reason = $block['reason']
+      if (!is_object($block)) {
+        continue;
+      }
+
+      $ip = (string) ($block->ip ?? '');
+      $reason = $block->reason
         ?? __(
           'Unknown',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
         );
-      $expiration = (int) ($block['expirationUnix'] ?? 0);
-      $is_permanent = !empty($block['permanent']);
+      $expiration = (int) ($block->expiration ?? 0);
+      $is_permanent = false;
 
       if (
         $ip === ''
@@ -687,6 +684,53 @@ final class SyncScheduler {
     }
 
     return true;
+  }
+
+  /**
+   * Read active blocks from the supported Wordfence 9 block API.
+   *
+   * @return array<int, object>|null Null indicates an actionable API failure.
+   */
+  private static function read_active_wordfence_blocks(): ?array {
+    if (!class_exists('\wfBlock')) {
+      self::$lastErrorMessage = __(
+        'Wordfence active-block API is unavailable. Install a supported Wordfence version (9.0.0 or later).',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+
+      return null;
+    }
+
+    if (!method_exists('\wfBlock', 'ipBlocks')) {
+      self::$lastErrorMessage = __(
+        'Wordfence 9 active-block API wfBlock::ipBlocks() is unavailable. Older internal Wordfence APIs are not supported.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+
+      return null;
+    }
+
+    try {
+      $blocks = \wfBlock::ipBlocks(true);
+    } catch (\Throwable $exception) {
+      self::$lastErrorMessage = __(
+        'Wordfence active-block lookup failed; synchronization was not completed.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+
+      return null;
+    }
+
+    if (!is_array($blocks)) {
+      self::$lastErrorMessage = __(
+        'Wordfence active-block API returned an invalid response; synchronization was not completed.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+
+      return null;
+    }
+
+    return $blocks;
   }
 
   /**

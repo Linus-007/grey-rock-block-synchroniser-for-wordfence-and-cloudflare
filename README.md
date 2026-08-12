@@ -27,7 +27,7 @@ Existing WordPress option names, hooks, database table names and the `WPCF\Firew
 
 The plugin reads current Wordfence blocks and historical Wordfence WAF events recorded as `blocked:waf`, then sends qualifying public IP addresses to Cloudflare using one of two modes.
 
-The plugin does not assume that a particular private Wordfence PHP method is available. When the installed Wordfence version does not expose its active-block API, Grey Rock continues using the verified historical WAF event table instead of terminating synchronization.
+Active-block synchronization requires Wordfence 9.0.0 or later and its supported `wfBlock::ipBlocks(true)` API. Grey Rock reads the returned `wfBlock` object properties `ip`, `reason` and `expiration`. Older internal APIs, including `wfBlock::getBlocks()`, are intentionally unsupported. If the supported API is unavailable, synchronization fails clearly instead of silently reporting success with an empty active-block list.
 
 Historical synchronization is configurable:
 

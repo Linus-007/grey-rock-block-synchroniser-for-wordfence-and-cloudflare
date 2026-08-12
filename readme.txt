@@ -195,7 +195,7 @@ The plugin provides:
 
 Wordfence does not provide a stable public API for every block source used by this plugin.
 
-Grey Rock checks whether the installed Wordfence active-block interface is available before using it. When that interface is unavailable, historical WAF synchronisation continues through the Wordfence event table.
+Active-block synchronization requires Wordfence 9.0.0 or later and its supported `wfBlock::ipBlocks(true)` API. Grey Rock reads the returned `wfBlock` object properties `ip`, `reason` and `expiration`. Older internal APIs, including `wfBlock::getBlocks()`, are intentionally unsupported. If the supported API is unavailable, synchronization fails clearly instead of silently reporting success with an empty active-block list.
 
 A future Wordfence release could change its internal class or database schema. Such a change may require a Grey Rock compatibility update.
 
