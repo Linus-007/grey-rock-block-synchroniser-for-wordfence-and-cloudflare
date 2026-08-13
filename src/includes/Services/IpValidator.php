@@ -16,15 +16,10 @@ final class IpValidator {
       return null;
     }
 
-    $mapped_prefix = str_repeat("\0", 10) . "\xff\xff";
+    $mapped_ipv4 = self::mapped_ipv4_from_packed($packed);
 
-    if (
-      strlen($packed) === 16
-      && substr($packed, 0, 12) === $mapped_prefix
-    ) {
-      $mapped_ipv4 = @inet_ntop(substr($packed, 12, 4));
-
-      return is_string($mapped_ipv4) ? $mapped_ipv4 : null;
+    if ($mapped_ipv4 !== null) {
+      return $mapped_ipv4;
     }
 
     $normalized = @inet_ntop($packed);
@@ -90,9 +85,15 @@ final class IpValidator {
       return false;
     }
 
-    if (stripos($ip, '::ffff:') === 0) {
-      $mapped_ipv4 = substr($ip, 7);
+    $packed = @inet_pton($ip);
 
+    if ($packed === false) {
+      return false;
+    }
+
+    $mapped_ipv4 = self::mapped_ipv4_from_packed($packed);
+
+    if ($mapped_ipv4 !== null) {
       return self::validate_ipv4($mapped_ipv4);
     }
 
@@ -117,6 +118,23 @@ final class IpValidator {
     }
 
     return false;
+  }
+
+  private static function mapped_ipv4_from_packed(
+    string $packed
+  ): ?string {
+    $mapped_prefix = str_repeat("\0", 10) . "\xff\xff";
+
+    if (
+      strlen($packed) !== 16
+      || substr($packed, 0, 12) !== $mapped_prefix
+    ) {
+      return null;
+    }
+
+    $mapped_ipv4 = @inet_ntop(substr($packed, 12, 4));
+
+    return is_string($mapped_ipv4) ? $mapped_ipv4 : null;
   }
 
   private static function validate_ipv4(string $ip): bool {

@@ -287,51 +287,84 @@ capacity_assert(
 
 $plain_ipv4 = '8.8.8.8';
 $mapped_ipv6 = '::ffff:8.8.8.8';
+$hextet_mapped_ipv6 = '::ffff:0808:0808';
 $expanded_mapped_ipv6 = '0:0:0:0:0:ffff:0808:0808';
-capacity_assert(
-  WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
-    $plain_ipv4
-  ) === $plain_ipv4,
-  'Plain IPv4 canonicalization changed its identity.'
-);
-capacity_assert(
-  WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
-    $mapped_ipv6
-  ) === $plain_ipv4,
-  'Dotted IPv4-mapped IPv6 did not canonicalize to IPv4.'
-);
-capacity_assert(
-  WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
-    $expanded_mapped_ipv6
-  ) === $plain_ipv4,
-  'Expanded IPv4-mapped IPv6 did not canonicalize by packed prefix.'
-);
-capacity_assert(
-  WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
-    '::ffff:0808:0808'
-  ) === null,
-  'The regression improperly broadened mapped IPv6 validation.'
-);
-capacity_assert(
-  ResetWatermarkStore::set($expanded_mapped_ipv6, $ipv6_reset),
-  'Expanded IPv4-mapped IPv6 reset could not be stored.'
-);
-capacity_assert(
-  ResetWatermarkStore::get($plain_ipv4) === $ipv6_reset,
-  'Expanded mapped reset did not share canonical IPv4 identity.'
-);
-capacity_assert(
-  array_key_exists(
-    $plain_ipv4,
-    $capacity_options[ResetWatermarkStore::SITE_OPTION]
-  ),
-  'Mapped reset was not stored under one plain IPv4 key.'
-);
-capacity_assert(
-  ResetWatermarkStore::clear($plain_ipv4)
-    && ResetWatermarkStore::get($expanded_mapped_ipv6) === 0,
-  'Plain IPv4 did not clear the expanded mapped reset.'
-);
+$public_ipv4_forms = [
+  $plain_ipv4,
+  $mapped_ipv6,
+  $hextet_mapped_ipv6,
+  $expanded_mapped_ipv6,
+];
+
+foreach ($public_ipv4_forms as $public_ipv4_form) {
+  capacity_assert(
+    WPCF\FirewallSync\Services\IpValidator::validate_public_ip(
+      $public_ipv4_form
+    ),
+    "Public IPv4 form was rejected: {$public_ipv4_form}"
+  );
+  capacity_assert(
+    WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
+      $public_ipv4_form
+    ) === $plain_ipv4,
+    "Public IPv4 form did not share canonical identity: {$public_ipv4_form}"
+  );
+}
+
+foreach ([' 8.8.8.8', '8.8.8.8 ', '8.8.8.8/32', 'not-an-ip'] as $invalid_ip) {
+  capacity_assert(
+    !WPCF\FirewallSync\Services\IpValidator::validate_public_ip($invalid_ip),
+    "Invalid IP syntax was accepted: {$invalid_ip}"
+  );
+}
+
+foreach ([$mapped_ipv6, $hextet_mapped_ipv6, $expanded_mapped_ipv6] as $mapped_form) {
+  $capacity_options[ResetWatermarkStore::SITE_OPTION] = [];
+  capacity_assert(
+    ResetWatermarkStore::set($mapped_form, $ipv6_reset),
+    'Mapped IPv6 reset could not be stored.'
+  );
+  capacity_assert(
+    ResetWatermarkStore::get($plain_ipv4) === $ipv6_reset,
+    'Mapped reset did not share canonical IPv4 identity.'
+  );
+  capacity_assert(
+    array_keys($capacity_options[ResetWatermarkStore::SITE_OPTION])
+      === [$plain_ipv4],
+    'Mapped reset was not stored under one plain IPv4 key.'
+  );
+  capacity_assert(
+    ResetWatermarkStore::clear($plain_ipv4)
+      && ResetWatermarkStore::get($mapped_form) === 0,
+    'Plain IPv4 did not clear a mapped reset.'
+  );
+}
+
+$denied_mapped_ips = [
+  '::ffff:127.0.0.1',
+  '0:0:0:0:0:ffff:7f00:0001',
+  '::ffff:10.0.0.1',
+  '0:0:0:0:0:ffff:0a00:0001',
+  '::ffff:192.168.1.1',
+  '0:0:0:0:0:ffff:c0a8:0101',
+  '::ffff:169.254.1.1',
+  '0:0:0:0:0:ffff:a9fe:0101',
+];
+
+foreach ($denied_mapped_ips as $denied_mapped_ip) {
+  capacity_assert(
+    !WPCF\FirewallSync\Services\IpValidator::validate_public_ip(
+      $denied_mapped_ip
+    ),
+    "Denied embedded IPv4 was accepted: {$denied_mapped_ip}"
+  );
+  capacity_assert(
+    WPCF\FirewallSync\Services\IpValidator::normalize_public_ip(
+      $denied_mapped_ip
+    ) === null,
+    "Denied mapped IPv4 was normalized: {$denied_mapped_ip}"
+  );
+}
 
 $normalize_logs = new ReflectionMethod(
   WPCF\FirewallSync\Services\NetworkSynchronizer::class,
@@ -349,6 +382,7 @@ capacity_assert(
 $normalized_mapped_logs = $normalize_logs->invoke(null, [
   $plain_ipv4,
   $mapped_ipv6,
+  $hextet_mapped_ipv6,
   $expanded_mapped_ipv6,
 ]);
 capacity_assert(
@@ -361,5 +395,13 @@ capacity_assert(
   ) === $ipv6_canonical,
   'Native IPv6 canonicalization changed.'
 );
+foreach (['::1', 'fc00::1', 'fe80::1', '2001:db8::1'] as $denied_native_ipv6) {
+  capacity_assert(
+    !WPCF\FirewallSync\Services\IpValidator::validate_public_ip(
+      $denied_native_ipv6
+    ),
+    "Denied native IPv6 was accepted: {$denied_native_ipv6}"
+  );
+}
 
 echo "Canonical IPv6 reset/reconciliation regression: PASS\n";
