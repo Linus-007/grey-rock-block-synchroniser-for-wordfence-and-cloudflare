@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.3-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-tested%20with%207.0.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1039,6 +1039,25 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.3
+
+- Restored current active-block synchronisation with Wordfence 9.0.0
+  by using `wfBlock::ipBlocks(true)` and the current `wfBlock` object
+  interface.
+- Resolved the historical Wordfence `wfHits` table through
+  `wfDB::networkTable('wfHits')` so Wordfence controls the network
+  prefix and table-name case.
+- Changed Wordfence compatibility policy to support only the current
+  Wordfence release and to fail synchronisation when required current
+  interfaces are unavailable.
+- Added a Wordfence 9 compatibility regression test to the mandatory
+  `make validate` release gate.
+- Updated Semgrep to 1.172.0.
+- Updated WordPress Coding Standards to 3.4.1 and PHP_CodeSniffer to
+  3.13.6, including their required current compatible dependencies.
+- Remediated the two high-severity development-tool dependency
+  advisories reported by GitHub Dependabot.
 
 ### 1.3.1
 

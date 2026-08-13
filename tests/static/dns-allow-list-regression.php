@@ -68,6 +68,10 @@ $service = file_get_contents(
 $uninstall = file_get_contents(
   $root . '/src/uninstall.php'
 );
+$plugin_entry = file_get_contents(
+  $root
+  . '/src/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
+);
 
 foreach (
   [
@@ -293,10 +297,29 @@ foreach (
   );
 }
 
+if (
+  preg_match(
+    '/^[[:space:]]*\*[[:space:]]+Version:[[:space:]]*'
+    . '([0-9]+\.[0-9]+\.[0-9]+)/m',
+    $plugin_entry,
+    $plugin_version_match
+  ) !== 1
+) {
+  fail_test(
+    'The authoritative plugin version could not be read.'
+  );
+}
+
+$plugin_version = $plugin_version_match[1];
+
 assert_contains(
-  'https://img.shields.io/badge/version-1.3.1-blue',
+  'https://img.shields.io/badge/version-'
+    . $plugin_version
+    . '-blue',
   $github_readme,
-  'The GitHub README version badge is not 1.3.1.'
+  'The GitHub README version badge does not match plugin version '
+    . $plugin_version
+    . '.'
 );
 
 assert_contains(

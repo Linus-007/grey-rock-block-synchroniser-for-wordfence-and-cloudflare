@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.3.1
+Stable tag: 1.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -465,6 +465,16 @@ No.
 
 == Changelog ==
 
+= 1.3.3 =
+
+* Restored current active-block synchronisation with Wordfence 9.0.0 using `wfBlock::ipBlocks(true)` and the current `wfBlock` object interface.
+* Resolves the historical Wordfence `wfHits` table through `wfDB::networkTable('wfHits')` so Wordfence controls the network prefix and table-name case.
+* Supports only the current Wordfence release and reports synchronisation failure when required current interfaces are unavailable.
+* Added a Wordfence 9 compatibility regression test to the mandatory release validation gate.
+* Updated Semgrep to 1.172.0.
+* Updated WordPress Coding Standards to 3.4.1 and PHP_CodeSniffer to 3.13.6 with their required compatible dependencies.
+* Remediated two high-severity development-tool dependency advisories reported by GitHub Dependabot.
+
 = 1.3.1 =
 
 * Added a DNS-resolved administrator allow list for existing DDNS hostnames.
@@ -593,6 +603,11 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.3 =
+Restores compatibility with the current Wordfence 9.0.0 block interface,
+corrects Wordfence historical-table resolution and updates security testing
+dependencies. Grey Rock supports only the current Wordfence release.
 
 = 1.3.1 =
 Adds DDNS-resolved administrator allow-list protection, automatic removal of
