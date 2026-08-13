@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.3.3
+Stable tag: 1.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -465,6 +465,16 @@ No.
 
 == Changelog ==
 
+= 1.3.4 =
+
+* Corrected multisite historical Wordfence WAF attribution by matching each shared `wfHits` event only to the exact attacked site hostname.
+* Added evidence-aware re-synchronization so stale evidence cannot recreate a removed Account IP List entry, while newer qualifying attacks can restore it.
+* Added optional stale-local-record cleanup for Account IP List mode through `purge_local_records_missing_in_cloudflare`; it is disabled by default.
+* Added reset-watermark protection and fail-closed destructive reconciliation requiring retained evidence boundaries and complete synchronization evaluation.
+* Distinguished proven-empty Cloudflare inventory from failed or incomplete inventory reads.
+* Canonicalized equivalent IPv4-mapped IPv6 forms consistently across PHP 8.1 through 8.4 while retaining the existing embedded-IPv4 denial policy.
+* Expanded regressions for multisite attribution, shared lists, recidivism, reset safety, expiry cleanup, inventory failures, Wordfence 9 and cross-PHP address handling.
+
 = 1.3.3 =
 
 * Restored current active-block synchronisation with Wordfence 9.0.0 using `wfBlock::ipBlocks(true)` and the current `wfBlock` object interface.
@@ -603,6 +613,12 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.4 =
+Corrects multisite Wordfence event attribution, safely permits re-synchronization
+after Cloudflare list removal when newer qualifying evidence exists, adds optional
+disabled-by-default stale-local-record cleanup for Account IP List mode, and
+hardens fail-closed reconciliation and IP canonicalization.
 
 = 1.3.3 =
 Restores compatibility with the current Wordfence 9.0.0 block interface,

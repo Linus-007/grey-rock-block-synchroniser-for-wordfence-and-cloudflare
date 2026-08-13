@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.3-blue)
+![Version](https://img.shields.io/badge/version-1.3.4-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-tested%20with%207.0.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1039,6 +1039,29 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.4
+
+- Fixed multisite historical Wordfence WAF attribution so shared
+  `wfHits` events match only the exact home or site hostname attacked.
+- Added evidence-aware recidivism so stale Wordfence events cannot
+  recreate a removed Cloudflare Account IP List entry, while genuinely
+  newer qualifying activity can restore it.
+- Added optional stale-local-record cleanup for Account IP List mode
+  through `purge_local_records_missing_in_cloudflare`, disabled by
+  default.
+- Added reset-watermark protection and fail-closed reconciliation so
+  destructive cleanup requires a retained evidence boundary and a
+  complete applicable synchronization evaluation.
+- Hardened Cloudflare inventory handling to distinguish a proven empty
+  list from a failed or incomplete inventory read.
+- Canonicalized equivalent IPv4-mapped IPv6 forms to their embedded IPv4
+  identity consistently on PHP 8.1 through 8.4 while preserving the
+  existing denial policy for private and special-use embedded addresses.
+- Expanded regression coverage for multisite attribution, shared-list
+  behavior, recidivism, reset capacity, ordering and retention, expiry
+  cleanup, Cloudflare inventory failures, Wordfence 9 interfaces and
+  cross-PHP mapped-address behavior.
 
 ### 1.3.3
 
