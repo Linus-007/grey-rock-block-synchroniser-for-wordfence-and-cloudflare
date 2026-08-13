@@ -7,8 +7,8 @@ namespace WPCF\FirewallSync\Services;
 
 /*
  * Direct database access is required to read Wordfence WAF history.
- * The table name uses the trusted WordPress base prefix plus the
- * fixed Wordfence table suffix; it is never supplied by a user.
+ * Wordfence resolves the network table prefix and table-name case
+ * through wfDB::networkTable('wfHits'); it is never supplied by a user.
  *
  * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
  * phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -41,7 +41,7 @@ final class HistoricalBlockReader {
       $minimum_events
     );
 
-    $table = $wpdb->base_prefix . 'wfhits';
+    $table = \wfDB::networkTable('wfHits');
 
     $table_exists = $wpdb->get_var(
       $wpdb->prepare(

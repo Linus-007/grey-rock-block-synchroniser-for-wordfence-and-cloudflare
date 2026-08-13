@@ -54,7 +54,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install Semgrep
-        run: python -m pip install --disable-pip-version-check "semgrep==1.169.0"
+        run: python -m pip install --disable-pip-version-check "semgrep==1.172.0"
 
       - name: Run Semgrep
         run: semgrep scan --config auto --error src

@@ -497,21 +497,35 @@ final class SyncScheduler {
     }
 
     /*
-     * Wordfence has changed the internal wfBlock API between releases.
-     * Active-block retrieval is optional so historical wp_wfhits records
-     * remain available without causing a fatal error.
+     * Grey Rock supports the current Wordfence release only.
+     *
+     * Current Wordfence active IP blocks are retrieved through
+     * wfBlock::ipBlocks(true). Removed Wordfence interfaces are
+     * intentionally unsupported.
      */
-    $blocks = [];
-
     if (
-      class_exists('\wfBlock')
-      && method_exists('\wfBlock', 'getBlocks')
+      !class_exists('\\wfBlock')
+      || !method_exists('\\wfBlock', 'ipBlocks')
+      || !class_exists('\\wfDB')
+      || !method_exists('\\wfDB', 'networkTable')
     ) {
-      $wordfence_blocks = \wfBlock::getBlocks();
+      self::$lastErrorMessage = __(
+        'Grey Rock requires the current Wordfence release. The required Wordfence interface is unavailable.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
 
-      if (is_array($wordfence_blocks)) {
-        $blocks = $wordfence_blocks;
-      }
+      return false;
+    }
+
+    $blocks = \wfBlock::ipBlocks(true);
+
+    if (!is_array($blocks)) {
+      self::$lastErrorMessage = __(
+        'Wordfence returned an unexpected active-block response.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+
+      return false;
     }
 
     /*
@@ -521,14 +535,28 @@ final class SyncScheduler {
     $batch_by_ip = [];
 
     foreach ($blocks as $block) {
-      $ip = (string) ($block['ip'] ?? '');
-      $reason = $block['reason']
-        ?? __(
+      if (!$block instanceof \wfBlock) {
+        self::$lastErrorMessage = __(
+          'Wordfence returned an unexpected active-block entry.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+
+        return false;
+      }
+
+      $ip = (string) $block->ip;
+      $reason = (string) $block->reason;
+      $expiration = (int) $block->expiration;
+      $is_permanent = (
+        $expiration === \wfBlock::DURATION_FOREVER
+      );
+
+      if ($reason === '') {
+        $reason = __(
           'Unknown',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
         );
-      $expiration = (int) ($block['expirationUnix'] ?? 0);
-      $is_permanent = !empty($block['permanent']);
+      }
 
       if (
         $ip === ''

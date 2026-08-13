@@ -52,7 +52,7 @@ The recommended list name is:
 
 The plugin can synchronise:
 
-* Current Wordfence blocks when the installed Wordfence version exposes its active-block interface.
+* Current Wordfence IP blocks through `wfBlock::ipBlocks(true)`.
 * Historical Wordfence Web Application Firewall events recorded as `blocked:waf`.
 
 Historical synchronisation is configurable:
@@ -193,11 +193,18 @@ The plugin provides:
 
 = Wordfence compatibility =
 
-Wordfence does not provide a stable public API for every block source used by this plugin.
+Grey Rock supports only the current Wordfence release. Older Wordfence releases are intentionally unsupported.
 
-Grey Rock checks whether the installed Wordfence active-block interface is available before using it. When that interface is unavailable, historical WAF synchronisation continues through the Wordfence event table.
+At the time of this compatibility update, the supported Wordfence release is 9.0.0.
 
-A future Wordfence release could change its internal class or database schema. Such a change may require a Grey Rock compatibility update.
+Active IP blocks are read through `wfBlock::ipBlocks(true)`. Historical WAF events are read from the table returned by `wfDB::networkTable('wfHits')`, allowing Wordfence to resolve the correct network prefix and table-name case.
+
+Removed Wordfence interfaces such as `wfBlock::getBlocks()` are not used.
+
+If a required current Wordfence interface is unavailable, Grey Rock reports synchronization failure instead of silently continuing with partial Wordfence data.
+
+A future Wordfence release may change these interfaces. Grey Rock will be updated for the then-current Wordfence release rather than maintaining compatibility branches for older Wordfence versions.
+
 
 = Independence and trademarks =
 
@@ -268,7 +275,7 @@ Uninstalling the plugin removes its local plugin options and tables according to
 
 == Installation ==
 
-1. Install and activate Wordfence.
+1. Install and activate the current Wordfence release.
 2. Install and activate Grey Rock Block Synchroniser for Wordfence and
    Cloudflare.
 3. Open **Grey Rock Block Synchroniser** in WordPress Admin.
@@ -394,9 +401,10 @@ Yes. It reads qualifying Wordfence WAF events recorded as `blocked:waf` within t
 
 Yes. The historical block threshold accepts whole numbers from 1 through 100.
 
-= What happens if Wordfence does not expose its active-block interface? =
+= What happens if the required Wordfence interface is unavailable? =
 
-The plugin continues using historical Wordfence WAF events instead of terminating synchronisation.
+Synchronization fails and reports the compatibility problem. Grey Rock supports only the current Wordfence release and does not fall back to removed interfaces from older Wordfence versions.
+
 
 = Does the plugin support WordPress multisite? =
 
