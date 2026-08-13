@@ -35,13 +35,6 @@ Modes:
 EOF
 }
 
-stop_test_services() {
-	sudo systemctl stop \
-		docker.socket \
-		docker.service \
-		containerd.service >/dev/null 2>&1 || true
-}
-
 remove_unversioned_svn_files() {
 	python3 - "$WPORG_SVN_WORKING_COPY" "$VERSION" <<'PYTHON'
 from pathlib import Path
@@ -122,8 +115,6 @@ cleanup() {
 	if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
 		rm -rf "$TEMP_DIR"
 	fi
-
-	stop_test_services
 
 	exit "$result"
 }
