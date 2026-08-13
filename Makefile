@@ -29,6 +29,11 @@ validate:
 	@$(PHP) tests/static/log-ui-regression.php
 	@$(PHP) tests/static/dns-allow-list-regression.php
 	@$(PHP) tests/static/wordfence-9-compatibility-regression.php
+	@$(PHP) tests/static/maintenance-1.3.4-regression.php
+	@$(PHP) tests/static/cloudflare-inventory-regression.php
+	@$(PHP) tests/static/reset-watermark-capacity-regression.php
+	@$(PHP) tests/static/multisite-shared-ip-attribution-regression.php
+	@$(PHP) tests/static/cleanup-reset-regression.php
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^ \* Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare$$' "$(PLUGIN_ENTRY)"

@@ -136,6 +136,38 @@ final class BlockLogger {
   }
 
   /**
+   * Return the Unix timestamp of the latest successful synchronization.
+   */
+  public static function get_synced_timestamp(string $ip): int {
+    global $wpdb;
+
+    $table = $wpdb->prefix . self::TABLE;
+    $synced_at = $wpdb->get_var(
+      $wpdb->prepare(
+        "SELECT synced_at
+         FROM {$table}
+         WHERE ip = %s
+           AND synced_at IS NOT NULL
+           AND fail_count = 0
+         LIMIT 1",
+        $ip
+      )
+    );
+
+    if (!is_string($synced_at) || $synced_at === '') {
+      return 0;
+    }
+
+    try {
+      $date = new \DateTimeImmutable($synced_at, wp_timezone());
+    } catch (\Exception $exception) {
+      return 0;
+    }
+
+    return $date->getTimestamp();
+  }
+
+  /**
    * Return only IPs that were successfully synchronized.
    */
   public static function get_all_ips(): array {

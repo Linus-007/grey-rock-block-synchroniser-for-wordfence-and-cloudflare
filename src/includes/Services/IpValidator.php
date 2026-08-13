@@ -5,6 +5,33 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync\Services;
 
 final class IpValidator {
+  public static function normalize_public_ip(string $ip): ?string {
+    if (!self::validate_public_ip($ip)) {
+      return null;
+    }
+
+    $packed = @inet_pton($ip);
+
+    if ($packed === false) {
+      return null;
+    }
+
+    $mapped_prefix = str_repeat("\0", 10) . "\xff\xff";
+
+    if (
+      strlen($packed) === 16
+      && substr($packed, 0, 12) === $mapped_prefix
+    ) {
+      $mapped_ipv4 = @inet_ntop(substr($packed, 12, 4));
+
+      return is_string($mapped_ipv4) ? $mapped_ipv4 : null;
+    }
+
+    $normalized = @inet_ntop($packed);
+
+    return is_string($normalized) ? $normalized : null;
+  }
+
   /**
    * IPv4 ranges that must never be sent to Cloudflare as public attackers.
    *

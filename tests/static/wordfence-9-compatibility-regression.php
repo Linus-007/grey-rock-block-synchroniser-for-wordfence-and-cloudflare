@@ -90,6 +90,12 @@ assert_contains(
 );
 
 assert_contains(
+  '$block->blockedTime',
+  $scheduler,
+  'SyncScheduler does not use the current wfBlock creation timestamp.'
+);
+
+assert_contains(
   '\\wfBlock::DURATION_FOREVER',
   $scheduler,
   'Permanent Wordfence block handling is missing.'

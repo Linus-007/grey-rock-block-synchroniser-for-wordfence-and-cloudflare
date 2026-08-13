@@ -48,6 +48,19 @@ final class Commands {
 
     if ($mode === 'force') {
       if (!SyncScheduler::run_now()) {
+        $reconciliation =
+          SyncScheduler::get_last_reconciliation_result();
+
+        if (is_array($reconciliation)) {
+          \WP_CLI::error(
+            sprintf(
+              'Site reconciliation stopped after %1$d completed purge(s): %2$s',
+              count($reconciliation['purged'] ?? []),
+              self::failure_message()
+            )
+          );
+        }
+
         \WP_CLI::error(self::failure_message());
       }
 
@@ -141,6 +154,19 @@ final class Commands {
         sprintf(
           'Network synchronization failed for %d site(s).',
           count($summary['failed'])
+        )
+      );
+    }
+
+    if (
+      is_array($summary['reconciliation'])
+      && empty($summary['reconciliation']['complete'])
+    ) {
+      \WP_CLI::error(
+        sprintf(
+          'Network reconciliation stopped after %1$d completed purge(s): %2$s',
+          count($summary['reconciliation']['purged'] ?? []),
+          (string) $summary['reconciliation']['error']
         )
       );
     }

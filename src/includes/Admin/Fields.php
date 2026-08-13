@@ -11,6 +11,7 @@ use WPCF\FirewallSync\Services\BlockLogger;
 use WPCF\FirewallSync\Services\IpValidator;
 use WPCF\FirewallSync\Services\DnsAllowList;
 use WPCF\FirewallSync\Services\Reconciler;
+use WPCF\FirewallSync\Services\ResetWatermarkStore;
 use WPCF\FirewallSync\Services\SyncScheduler;
 use WPCF\FirewallSync\Services\NetworkSynchronizer;
 
@@ -113,6 +114,7 @@ final class Fields {
     self::add_sync_interval_field();
     self::add_historical_lookback_field();
     self::add_historical_minimum_events_field();
+    self::add_purge_missing_records_field();
   }
 
   private static function add_allow_site_overrides_field(): void {
@@ -499,6 +501,41 @@ final class Fields {
     );
   }
 
+  private static function add_purge_missing_records_field(): void {
+    add_settings_field(
+      'purge_local_records_missing_in_cloudflare',
+      __(
+        'Cloudflare-authoritative cleanup',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      ),
+      static function (): void {
+        $options = Config::get_admin_options();
+        $enabled = !empty(
+          $options['purge_local_records_missing_in_cloudflare']
+        );
+
+        printf(
+          '<label><input type="checkbox" name="firewall_sync_options[purge_local_records_missing_in_cloudflare]" value="1"%1$s%2$s> %3$s</label>',
+          checked($enabled, true, false),
+          disabled(self::configuration_fields_disabled(), true, false),
+          esc_html__(
+            'Remove Grey Rock records when absent from Cloudflare',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          )
+        );
+
+        echo '<p class="description">';
+        echo esc_html__(
+          'In Account IP List mode, Grey Rock removes stale local synchronization records only after successful evaluation confirms that their addresses remain absent from the configured Cloudflare list. New qualifying Wordfence attacks can synchronize them again.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        echo '</p>';
+      },
+      'firewall-sync-settings',
+      'firewall_sync_main_section'
+    );
+  }
+
   private static function add_scheduling_method_field(): void {
     add_settings_field(
       'schedule_method',
@@ -734,6 +771,8 @@ final class Fields {
       );
     }
 
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
+
     $client = new Client(
       $options['cloudflare_api_token'] ?? '',
       $options['cloudflare_zone_id'] ?? ''
@@ -860,6 +899,8 @@ final class Fields {
         'error'
       );
     }
+
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     $operation = sanitize_key(
       wp_unslash($_POST['firewall_sync_list_operation'] ?? '')
@@ -988,6 +1029,17 @@ final class Fields {
         'The IP address could not be removed from the Cloudflare list.',
         'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
       );
+
+      if ($success) {
+        $success = self::record_manual_removal_reset($scope, $ip);
+
+        if (!$success) {
+          $failure_message = __(
+            'Cloudflare removed the address, but Grey Rock could not safely record the local evidence reset.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+        }
+      }
     }
 
     self::redirect_with_message(
@@ -1000,6 +1052,45 @@ final class Fields {
         ),
       $success ? 'updated' : 'error'
     );
+  }
+
+  private static function record_manual_removal_reset(
+    string $scope,
+    string $ip
+  ): bool {
+    if ($scope !== 'network') {
+      if (ResetWatermarkStore::set($ip, time())) {
+        return BlockLogger::remove($ip);
+      }
+
+      return false;
+    }
+
+    $watermark_set = false;
+
+    $removed = true;
+
+    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+      switch_to_blog((int) $blog_id);
+
+      try {
+        if (!Config::uses_network_options()) {
+          continue;
+        }
+
+        if (!$watermark_set) {
+          $watermark_set = ResetWatermarkStore::set($ip, time());
+        }
+
+        if ($watermark_set) {
+          $removed = BlockLogger::remove($ip) && $removed;
+        }
+      } finally {
+        restore_current_blog();
+      }
+    }
+
+    return $watermark_set && $removed;
   }
 
   public static function handle_network_sync_now(): void {
@@ -1045,6 +1136,25 @@ final class Fields {
           ),
           $summary['successful'],
           implode(' | ', $failed_sites)
+        ),
+        'error'
+      );
+    }
+
+    if (
+      is_array($summary['reconciliation'])
+      && empty($summary['reconciliation']['complete'])
+    ) {
+      self::redirect_with_message(
+        'network',
+        sprintf(
+          /* translators: 1: number of safe purges, 2: error. */
+          __(
+            'Network reconciliation stopped after %1$d completed purge(s): %2$s',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          count($summary['reconciliation']['purged'] ?? []),
+          (string) $summary['reconciliation']['error']
         ),
         'error'
       );
@@ -1109,12 +1219,23 @@ final class Fields {
       );
     }
 
-    SyncScheduler::run_cleanup();
+    $result = SyncScheduler::run_cleanup();
 
     self::redirect_with_message(
       'site',
-      __('Cleanup completed.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
-      'updated'
+      !empty($result['complete'])
+        ? sprintf(
+          /* translators: %d: number of cleaned IP addresses. */
+          __('Cleanup completed for %d address(es).', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+          count($result['removed'] ?? [])
+        )
+        : sprintf(
+          /* translators: 1: number of completed removals, 2: error. */
+          __('Cleanup stopped after %1$d completed removal(s): %2$s', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+          count($result['removed'] ?? []),
+          (string) ($result['error'] ?? '')
+        ),
+      !empty($result['complete']) ? 'updated' : 'error'
     );
   }
 
@@ -1138,6 +1259,56 @@ final class Fields {
     }
 
     $options = Config::get_effective_options();
+
+    if (($options['cloudflare_mode'] ?? '') === 'account_list') {
+      if (!SyncScheduler::run_now()) {
+        $failed_result =
+          SyncScheduler::get_last_reconciliation_result();
+        $completed_purges = is_array($failed_result)
+          ? count($failed_result['purged'] ?? [])
+          : 0;
+
+        self::redirect_with_message(
+          'site',
+          sprintf(
+            /* translators: 1: completed purge count, 2: error. */
+            __(
+              'Reconciliation stopped after %1$d completed purge(s): %2$s',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            $completed_purges,
+            SyncScheduler::get_last_error_message()
+          ),
+          'error'
+        );
+      }
+
+      $result = SyncScheduler::get_last_reconciliation_result();
+
+      if (!is_array($result)) {
+        $result = [
+          'complete' => false,
+          'missing_in_cf' => [],
+          'orphaned_in_cf' => [],
+          'purged' => [],
+          'error' => __(
+            'Reconciliation did not produce a complete result.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+        ];
+      }
+
+      set_transient(
+        'firewall_sync_reconcile_result',
+        $result,
+        60
+      );
+
+      wp_safe_redirect(
+        admin_url('admin.php?page=firewall-sync-settings')
+      );
+      exit;
+    }
 
     $client = new Client(
       $options['cloudflare_api_token'] ?? '',
@@ -1180,6 +1351,8 @@ final class Fields {
         'error'
       );
     }
+
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     $options = Config::get_effective_options();
 

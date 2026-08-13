@@ -35,6 +35,7 @@ final class SyncScheduler {
     'firewall_sync_last_attempt_timestamp';
 
   private static string $lastErrorMessage = '';
+  private static ?array $lastReconciliationResult = null;
 
   public static function register(): void {
     add_action(
@@ -213,6 +214,7 @@ final class SyncScheduler {
    */
   public static function run_now(): bool {
     self::$lastErrorMessage = '';
+    self::$lastReconciliationResult = null;
 
     if (!self::acquire_lock()) {
       return false;
@@ -461,6 +463,7 @@ final class SyncScheduler {
 
     $client = new Client($token, $zone);
     $list_id = '';
+    $account_inventory = null;
 
     if ($mode === 'account_list') {
       $resolved_list_id = $client->resolve_account_list_id(
@@ -495,6 +498,23 @@ final class SyncScheduler {
     ) {
       return false;
     }
+
+    if ($mode === 'account_list') {
+      $account_inventory = $client->get_current_account_list_ips(
+        $account_id,
+        $list_id
+      );
+
+      if ($account_inventory === null) {
+        self::$lastErrorMessage = $client->get_last_error_message();
+        return false;
+      }
+    }
+
+    $cloudflare_set = array_fill_keys(
+      $account_inventory ?? [],
+      true
+    );
 
     /*
      * Grey Rock supports the current Wordfence release only.
@@ -544,11 +564,18 @@ final class SyncScheduler {
         return false;
       }
 
-      $ip = (string) $block->ip;
+      $ip = IpValidator::normalize_public_ip(
+        (string) $block->ip
+      ) ?? '';
       $reason = (string) $block->reason;
       $expiration = (int) $block->expiration;
+      $blocked_time = (int) $block->blockedTime;
       $is_permanent = (
         $expiration === \wfBlock::DURATION_FOREVER
+      );
+      $evidence_watermark = max(
+        BlockLogger::get_synced_timestamp($ip),
+        ResetWatermarkStore::get($ip)
       );
 
       if ($reason === '') {
@@ -567,7 +594,23 @@ final class SyncScheduler {
           && time() > $expiration
         )
         || isset($allowed_ips[$ip])
-        || BlockLogger::has_synced($ip)
+        || (
+          $mode === 'account_list'
+            ? (
+              self::should_skip_present_account_list_ip(
+                isset($cloudflare_set[$ip]),
+                BlockLogger::has_synced($ip)
+              )
+              || (
+                $evidence_watermark > 0
+                && !self::active_evidence_is_newer(
+                  $blocked_time,
+                  $evidence_watermark
+                )
+              )
+            )
+            : BlockLogger::has_synced($ip)
+        )
         || BlockLogger::is_blacklisted($ip)
       ) {
         continue;
@@ -600,8 +643,17 @@ final class SyncScheduler {
 
     $historical_blocks = HistoricalBlockReader::get_candidates(
       $lookback_hours,
-      $minimum_events
+      $minimum_events,
+      self::get_site_hosts()
     );
+
+    if ($historical_blocks === null) {
+      self::$lastErrorMessage = __(
+        'Wordfence historical WAF evidence could not be read completely.',
+        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+      );
+      return false;
+    }
 
     foreach ($historical_blocks as $historical_block) {
       $ip = (string) ($historical_block['ip'] ?? '');
@@ -616,7 +668,14 @@ final class SyncScheduler {
         $ip === ''
         || isset($batch_by_ip[$ip])
         || isset($allowed_ips[$ip])
-        || BlockLogger::has_synced($ip)
+        || (
+          $mode === 'account_list'
+            ? self::should_skip_present_account_list_ip(
+              isset($cloudflare_set[$ip]),
+              BlockLogger::has_synced($ip)
+            )
+            : BlockLogger::has_synced($ip)
+        )
         || BlockLogger::is_blacklisted($ip)
       ) {
         continue;
@@ -653,7 +712,8 @@ final class SyncScheduler {
     $batch = array_values($batch_by_ip);
 
     if ($mode === 'account_list') {
-      $failed = $client->batch_add_ips_to_account_list(
+      $failed = self::synchronize_account_list_batch(
+        $client,
         $account_id,
         $list_id,
         $batch
@@ -672,24 +732,8 @@ final class SyncScheduler {
       $failed = $client->batch_block($cloudflare_batch);
     }
 
-    foreach ($batch as $entry) {
-      $log_reason = 'sync: ' . $entry['reason'];
-
-      if (in_array($entry['ip'], $failed, true)) {
-        BlockLogger::mark_failed(
-          $entry['ip'],
-          $log_reason,
-          $entry['expires_at']
-        );
-
-        continue;
-      }
-
-      BlockLogger::log(
-        $entry['ip'],
-        $log_reason,
-        $entry['expires_at']
-      );
+    if ($mode !== 'account_list') {
+      self::record_batch_results($batch, $failed);
     }
 
     update_option(
@@ -714,7 +758,117 @@ final class SyncScheduler {
       return false;
     }
 
+    if (
+      $mode === 'account_list'
+      && (!is_multisite() || !Config::uses_network_options())
+    ) {
+      $post_inventory = $client->get_current_account_list_ips(
+        $account_id,
+        $list_id
+      );
+
+      if ($post_inventory === null) {
+        self::$lastErrorMessage = $client->get_last_error_message();
+        return false;
+      }
+
+      $reconciliation = Reconciler::run(
+        $client,
+        $options,
+        $post_inventory
+      );
+      self::$lastReconciliationResult = $reconciliation;
+
+      if (empty($reconciliation['complete'])) {
+        self::$lastErrorMessage = (string) (
+          $reconciliation['error']
+          ?? __('Reconciliation failed.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+        );
+        return false;
+      }
+    }
+
     return true;
+  }
+
+  /** @return array<int, string> */
+  private static function get_site_hosts(): array {
+    $hosts = [];
+
+    foreach ([home_url('/'), site_url('/')] as $url) {
+      $host = wp_parse_url($url, PHP_URL_HOST);
+
+      if (is_string($host) && $host !== '') {
+        $hosts[] = strtolower(rtrim($host, '.'));
+      }
+    }
+
+    return array_values(array_unique($hosts));
+  }
+
+  private static function active_evidence_is_newer(
+    int $blocked_time,
+    int $watermark
+  ): bool {
+    return $blocked_time > 0 && $blocked_time > $watermark;
+  }
+
+  private static function should_skip_present_account_list_ip(
+    bool $cloudflare_present,
+    bool $site_has_synced
+  ): bool {
+    /*
+     * Shared-list membership may have been created by another site. Only a
+     * site that already owns an attributable successful row suppresses a
+     * repeat episode while that shared Cloudflare entry remains present.
+     */
+    return $cloudflare_present && $site_has_synced;
+  }
+
+  private static function synchronize_account_list_batch(
+    Client $client,
+    string $account_id,
+    string $list_id,
+    array $batch
+  ): array {
+    $failed = $client->batch_add_ips_to_account_list(
+      $account_id,
+      $list_id,
+      $batch
+    );
+
+    self::record_batch_results($batch, $failed);
+
+    return $failed;
+  }
+
+  private static function record_batch_results(
+    array $batch,
+    array $failed
+  ): void {
+    foreach ($batch as $entry) {
+      $log_reason = 'sync: ' . $entry['reason'];
+
+      if (in_array($entry['ip'], $failed, true)) {
+        BlockLogger::mark_failed(
+          $entry['ip'],
+          $log_reason,
+          $entry['expires_at']
+        );
+
+        continue;
+      }
+
+      BlockLogger::log(
+        $entry['ip'],
+        $log_reason,
+        $entry['expires_at']
+      );
+
+      if (!is_multisite() || !Config::uses_network_options()) {
+        ResetWatermarkStore::clear($entry['ip']);
+      }
+    }
   }
 
   /**
@@ -815,7 +969,11 @@ final class SyncScheduler {
     return self::$lastErrorMessage;
   }
 
-  public static function run_cleanup(): void {
+  public static function get_last_reconciliation_result(): ?array {
+    return self::$lastReconciliationResult;
+  }
+
+  public static function run_cleanup(): array {
     global $wpdb;
 
     /*
@@ -825,7 +983,11 @@ final class SyncScheduler {
      * from that shared destination.
      */
     if (is_multisite() && Config::uses_network_options()) {
-      return;
+      return self::cleanup_result(
+        false,
+        [],
+        __('Shared inherited cleanup is unavailable.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+      );
     }
 
     $options = Config::get_effective_options();
@@ -837,7 +999,7 @@ final class SyncScheduler {
     $legacy_list_id = $options['cloudflare_list_id'] ?? '';
 
     if (empty($token)) {
-      return;
+      return self::cleanup_result(false, [], __('Cloudflare API Token is required.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'));
     }
 
     if ($mode === 'account_list') {
@@ -845,10 +1007,10 @@ final class SyncScheduler {
         empty($account_id)
         || (empty($list_name) && empty($legacy_list_id))
       ) {
-        return;
+        return self::cleanup_result(false, [], __('Cloudflare Account ID and List Name are required.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'));
       }
     } elseif (empty($zone)) {
-      return;
+      return self::cleanup_result(false, [], __('Cloudflare Zone ID is required.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'));
     }
 
     $client = new Client($token, $zone);
@@ -862,7 +1024,7 @@ final class SyncScheduler {
       );
 
       if ($resolved_list_id === null) {
-        return;
+        return self::cleanup_result(false, [], $client->get_last_error_message());
       }
 
       $list_id = $resolved_list_id;
@@ -871,6 +1033,8 @@ final class SyncScheduler {
     $table = $wpdb->prefix . BlockLogger::TABLE;
     $current_time = current_time('mysql');
     $last_id = 0;
+    $removed_ips = [];
+    $cleanup_error = '';
 
     do {
       $rows = $wpdb->get_results(
@@ -893,13 +1057,15 @@ final class SyncScheduler {
 
       foreach ($rows as $row) {
         $row_id = (int) ($row['id'] ?? 0);
-        $ip = $row['ip'] ?? null;
+        $ip = IpValidator::normalize_public_ip(
+          (string) ($row['ip'] ?? '')
+        );
 
         if ($row_id > $last_id) {
           $last_id = $row_id;
         }
 
-        if (!$ip) {
+        if ($ip === null) {
           continue;
         }
 
@@ -915,15 +1081,75 @@ final class SyncScheduler {
          * Retain the ownership record when deletion fails so a later cleanup
          * can retry instead of losing track of the Cloudflare entry.
          */
-        if ($deleted) {
-          $wpdb->delete(
-            $table,
-            ['id' => $row_id],
-            ['%d']
-          );
+        if (!$deleted) {
+          $cleanup_error = $client->get_last_error_message();
+          break 2;
         }
+
+        $local_cleanup = self::finalize_expired_local_cleanup(
+          $table,
+          $row_id,
+          $ip,
+          time()
+        );
+
+        if (!$local_cleanup['complete']) {
+          $cleanup_error = (string) $local_cleanup['error'];
+          break 2;
+        }
+
+        $removed_ips[] = $ip;
       }
     } while (count($rows) === self::DELETE_BATCH_SIZE);
+
+    return self::cleanup_result(
+      $cleanup_error === '',
+      $removed_ips,
+      $cleanup_error
+    );
+  }
+
+  private static function finalize_expired_local_cleanup(
+    string $table,
+    int $row_id,
+    string $ip,
+    int $reset_at
+  ): array {
+    global $wpdb;
+
+    if (!ResetWatermarkStore::set($ip, $reset_at)) {
+      return self::cleanup_result(
+        false,
+        [],
+        'Cloudflare cleanup removed an address, but local cleanup stopped because its reset watermark could not be stored. The local synchronization record was retained.'
+      );
+    }
+
+    if ($wpdb->delete(
+      $table,
+      ['id' => $row_id],
+      ['%d']
+    ) === false) {
+      return self::cleanup_result(
+        false,
+        [],
+        'A reset watermark was stored, but the expired local synchronization record could not be removed.'
+      );
+    }
+
+    return self::cleanup_result(true, [$ip], '');
+  }
+
+  private static function cleanup_result(
+    bool $complete,
+    array $removed_ips,
+    string $error
+  ): array {
+    return [
+      'complete' => $complete,
+      'removed' => $removed_ips,
+      'error' => $error,
+    ];
   }
 
   /**

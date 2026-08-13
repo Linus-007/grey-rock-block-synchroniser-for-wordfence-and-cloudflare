@@ -410,6 +410,8 @@ final class Client {
       return false;
     }
 
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
+
     $items = $this->get_account_list_item_map(
       $account_id,
       $list_id
@@ -441,6 +443,8 @@ final class Client {
     ) {
       return false;
     }
+
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     $items = $this->get_account_list_item_map(
       $account_id,
@@ -526,8 +530,9 @@ final class Client {
 
     foreach ($entries as $entry) {
       $ip = (string) ($entry['ip'] ?? '');
+      $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
-      if (!IpValidator::validate_public_ip($ip)) {
+      if ($ip === '') {
         $failed[] = $ip;
         continue;
       }
@@ -581,6 +586,8 @@ final class Client {
     ) {
       return false;
     }
+
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     $items = $this->get_account_list_item_map(
       $account_id,
@@ -688,13 +695,13 @@ final class Client {
   public function get_current_account_list_ips(
     string $account_id,
     string $list_id
-  ): array {
+  ): ?array {
     $items = $this->get_account_list_item_map(
       $account_id,
       $list_id
     );
 
-    return $items === null ? [] : array_keys($items);
+    return $items === null ? null : array_keys($items);
   }
 
   /**
@@ -809,9 +816,10 @@ final class Client {
         }
         $ip = (string) ($item['ip'] ?? '');
         $item_id = (string) ($item['id'] ?? '');
+        $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
         if (
-          IpValidator::validate_public_ip($ip)
+          $ip !== ''
           && $item_id !== ''
         ) {
           $items_by_ip[$ip] = $item_id;
@@ -1462,7 +1470,7 @@ final class Client {
     return substr($comment, 0, self::MAX_COMMENT_LENGTH);
   }
 
-  public function get_current_blocked_ips(): array {
+  public function get_current_blocked_ips(): ?array {
     if (
       !CloudflareIdentifierValidator::validate_zone_id(
         $this->zone
@@ -1476,7 +1484,7 @@ final class Client {
         )
       );
 
-      return [];
+      return null;
     }
 
     $ip_list = [];
@@ -1502,7 +1510,7 @@ final class Client {
           $body
         )
       ) {
-        return [];
+        return null;
       }
 
       $result = $this->response_result_array(
@@ -1511,7 +1519,7 @@ final class Client {
       );
 
       if ($result === null) {
-        return [];
+        return null;
       }
 
       foreach ($result as $rule) {
@@ -1524,7 +1532,7 @@ final class Client {
             )
           );
 
-          return [];
+          return null;
         }
 
         $configuration = $rule['configuration'] ?? null;
@@ -1549,7 +1557,7 @@ final class Client {
       );
 
       if ($total_pages === null) {
-        return [];
+        return null;
       }
 
       $page++;

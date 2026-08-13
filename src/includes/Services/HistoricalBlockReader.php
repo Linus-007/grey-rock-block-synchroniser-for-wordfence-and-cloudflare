@@ -25,12 +25,14 @@ final class HistoricalBlockReader {
    *   ip: string,
    *   event_count: int,
    *   latest_event: int
-   * }>
+   * }>|null Null means Wordfence evidence could not be read completely.
    */
   public static function get_candidates(
     int $lookback_hours,
-    int $minimum_events
-  ): array {
+    int $minimum_events,
+    array $site_hosts = [],
+    array $watermarks = []
+  ): ?array {
     global $wpdb;
 
     $lookback_hours = self::validated_lookback_hours(
@@ -51,7 +53,7 @@ final class HistoricalBlockReader {
     );
 
     if ($table_exists !== $table) {
-      return [];
+      return null;
     }
 
     $cutoff = time() - ($lookback_hours * HOUR_IN_SECONDS);
@@ -60,26 +62,24 @@ final class HistoricalBlockReader {
       $wpdb->prepare(
         "SELECT
           HEX(IP) AS ip_hex,
-          COUNT(*) AS event_count,
-          MAX(ctime) AS latest_event
+          ctime AS event_time,
+          URL AS event_url
         FROM {$table}
         WHERE action = %s
           AND ctime >= %f
-        GROUP BY IP
-        HAVING COUNT(*) >= %d
-        ORDER BY latest_event DESC",
+        ORDER BY ctime DESC",
         self::WORDFENCE_ACTION,
-        (float) $cutoff,
-        $minimum_events
+        (float) $cutoff
       ),
       ARRAY_A
     );
 
     if (!is_array($rows)) {
-      return [];
+      return null;
     }
 
-    $candidates = [];
+    $hosts = self::normalize_hosts($site_hosts);
+    $events_by_ip = [];
 
     foreach ($rows as $row) {
       $ip = self::decode_wordfence_ip(
@@ -90,16 +90,83 @@ final class HistoricalBlockReader {
         continue;
       }
 
+      $event_host = self::host_from_url(
+        (string) ($row['event_url'] ?? '')
+      );
+
+      if ($event_host === null || !isset($hosts[$event_host])) {
+        continue;
+      }
+
+      $event_time = (int) floor(
+        (float) ($row['event_time'] ?? 0)
+      );
+      $watermark = max(
+        0,
+        (int) ($watermarks[$ip] ?? 0),
+        BlockLogger::get_synced_timestamp($ip),
+        ResetWatermarkStore::get($ip)
+      );
+
+      if ($event_time <= $watermark) {
+        continue;
+      }
+
+      if (!isset($events_by_ip[$ip])) {
+        $events_by_ip[$ip] = [];
+      }
+
+      $events_by_ip[$ip][] = $event_time;
+    }
+
+    $candidates = [];
+
+    foreach ($events_by_ip as $ip => $event_times) {
+      $event_count = count($event_times);
+
+      if ($event_count < $minimum_events) {
+        continue;
+      }
+
       $candidates[] = [
         'ip' => $ip,
-        'event_count' => (int) ($row['event_count'] ?? 0),
-        'latest_event' => (int) floor(
-          (float) ($row['latest_event'] ?? 0)
-        ),
+        'event_count' => $event_count,
+        'latest_event' => max($event_times),
       ];
     }
 
+    usort(
+      $candidates,
+      static fn (array $left, array $right): int =>
+        $right['latest_event'] <=> $left['latest_event']
+    );
+
     return $candidates;
+  }
+
+  /** @return array<string, bool> */
+  private static function normalize_hosts(array $hosts): array {
+    $normalized = [];
+
+    foreach ($hosts as $host) {
+      $host = strtolower(rtrim(trim((string) $host), '.'));
+
+      if ($host !== '') {
+        $normalized[$host] = true;
+      }
+    }
+
+    return $normalized;
+  }
+
+  private static function host_from_url(string $url): ?string {
+    $host = wp_parse_url($url, PHP_URL_HOST);
+
+    if (!is_string($host) || $host === '') {
+      return null;
+    }
+
+    return strtolower(rtrim($host, '.'));
   }
 
   private static function decode_wordfence_ip(

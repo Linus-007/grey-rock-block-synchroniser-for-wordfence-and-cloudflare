@@ -157,6 +157,12 @@ final class Config {
       !empty($input['ddns_allow_enabled'])
         ? '1'
         : '0';
+    $output['purge_local_records_missing_in_cloudflare'] =
+      !empty(
+        $input['purge_local_records_missing_in_cloudflare']
+      )
+        ? '1'
+        : '0';
 
     $schedule_method = (string) (
       $input['schedule_method'] ?? self::SCHEDULER_WP_CRON
@@ -363,6 +369,7 @@ final class Config {
       'sync_interval',
       'historical_lookback_hours',
       'historical_minimum_events',
+      'purge_local_records_missing_in_cloudflare',
     ] as $key) {
       if (isset($options[$key]) && $options[$key] !== '') {
         return true;

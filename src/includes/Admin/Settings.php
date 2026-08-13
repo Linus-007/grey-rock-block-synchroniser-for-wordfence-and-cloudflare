@@ -584,7 +584,40 @@ final class Settings {
 
           <h2><?php echo esc_html(__('Reconciliation Results', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h2>
 
-          <?php if (empty($result['missing_in_cf']) && empty($result['orphaned_in_cf'])): ?>
+          <?php if (empty($result['complete'])): ?>
+            <p class="notice notice-error">
+              <?php
+              echo esc_html(
+                (string) (
+                  $result['error']
+                  ?? __('Reconciliation failed.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+                )
+              );
+              ?>
+            </p>
+
+            <?php if (!empty($result['purged'])): ?>
+              <p>
+                <?php
+                echo esc_html(
+                  sprintf(
+                    /* translators: %d: number of records purged before an error. */
+                    __(
+                      'Incomplete cleanup: %d local record(s) were safely purged before cleanup stopped.',
+                      'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+                    ),
+                    count($result['purged'])
+                  )
+                );
+                ?>
+              </p>
+              <ul>
+                <?php foreach ($result['purged'] as $ip): ?>
+                  <li><?php echo esc_html((string) $ip); ?></li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+          <?php elseif (empty($result['missing_in_cf']) && empty($result['orphaned_in_cf'])): ?>
             <p>
               <?php
               echo esc_html__(
@@ -607,6 +640,15 @@ final class Settings {
                 <li><?php echo esc_html((string) $ip); ?></li>
               <?php endforeach; ?>
             </ul>
+
+            <?php if (!empty($result['purged'])): ?>
+              <h3><?php echo esc_html(__('Purged local records', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h3>
+              <ul>
+                <?php foreach ($result['purged'] as $ip): ?>
+                  <li><?php echo esc_html((string) $ip); ?></li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
           <?php endif; ?>
         <?php endif; ?>
       <?php endif; ?>
