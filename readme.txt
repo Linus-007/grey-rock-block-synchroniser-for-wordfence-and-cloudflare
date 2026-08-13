@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.3.4
+Stable tag: 1.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -464,6 +464,13 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.5 =
+
+* Added contextual success and error feedback beside administrative action buttons while retaining the standard WordPress top-of-page notices.
+* Corrected the Cloudflare Validate and Test controls so their form ownership is preserved when the administration JavaScript relocates them for presentation.
+* Added responsive inline WordPress notice presentation with status and alert semantics for clearer and more accessible action feedback.
+* Added mandatory regression coverage for contextual feedback, action-to-message correlation and relocated Cloudflare controls.
 
 = 1.3.4 =
 

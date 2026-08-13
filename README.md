@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.4-blue)
+![Version](https://img.shields.io/badge/version-1.3.5-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-tested%20with%207.0.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1039,6 +1039,13 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.5
+
+- Added contextual success and error feedback beside administrative action buttons while retaining the standard WordPress top-of-page notices.
+- Corrected the Cloudflare Validate and Test controls so their form ownership is preserved when the administration JavaScript relocates them for presentation.
+- Added responsive inline WordPress notice presentation with status and alert semantics for clearer and more accessible action feedback.
+- Added mandatory regression coverage for contextual feedback, action-to-message correlation and relocated Cloudflare controls.
 
 ### 1.3.4
 
