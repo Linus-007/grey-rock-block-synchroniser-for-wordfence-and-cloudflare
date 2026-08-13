@@ -152,3 +152,34 @@ form table th {
   margin: 0;
 }
 /* GREY ROCK CLOUDFLARE FIELD LAYOUT END */
+
+/* GREY ROCK CONTEXTUAL ACTION FEEDBACK START */
+.firewall-sync-action-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 1em 0;
+}
+
+.firewall-sync-action-feedback .button {
+  margin: 0;
+}
+
+.firewall-sync-inline-feedback {
+  display: inline-block;
+  margin: 0;
+  max-width: 760px;
+}
+
+.firewall-sync-inline-feedback p {
+  margin: 6px 10px;
+}
+
+.grey-rock-cloudflare-test-validate
+  .firewall-sync-action-feedback,
+.grey-rock-cloudflare-test-run
+  .firewall-sync-action-feedback {
+  margin: 0;
+}
+/* GREY ROCK CONTEXTUAL ACTION FEEDBACK END */

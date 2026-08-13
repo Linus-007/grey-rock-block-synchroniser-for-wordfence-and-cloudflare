@@ -27,6 +27,7 @@ validate:
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Running static regression checks..."
 	@$(PHP) tests/static/log-ui-regression.php
+	@$(PHP) tests/static/action-feedback-regression.php
 	@$(PHP) tests/static/dns-allow-list-regression.php
 	@$(PHP) tests/static/wordfence-9-compatibility-regression.php
 	@$(PHP) tests/static/maintenance-1.3.4-regression.php

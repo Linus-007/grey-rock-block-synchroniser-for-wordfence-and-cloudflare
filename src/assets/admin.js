@@ -161,6 +161,30 @@
       return;
     }
 
+    const validateForm = validateButton.closest('form');
+    const runForm = runButton.closest('form');
+
+    if (!validateForm || !runForm) {
+      return;
+    }
+
+    if (!validateForm.id) {
+      validateForm.id = 'grey-rock-cloudflare-validate-form';
+    }
+
+    if (!runForm.id) {
+      runForm.id = 'grey-rock-cloudflare-test-form';
+    }
+
+    /*
+     * These controls are moved outside their original forms below.
+     * Preserve explicit form ownership so their hidden action, scope
+     * and nonce fields continue to be submitted.
+     */
+    validateButton.setAttribute('form', validateForm.id);
+    runButton.setAttribute('form', runForm.id);
+    testInput.setAttribute('form', runForm.id);
+
     const originalRows = new Set();
 
     [
@@ -212,7 +236,16 @@
     runContainer.className =
       'grey-rock-cloudflare-test-run';
 
-    validateContainer.appendChild(validateButton);
+    const validateAction = validateButton.closest(
+      '.firewall-sync-action-feedback'
+    );
+    const runAction = runButton.closest(
+      '.firewall-sync-action-feedback'
+    );
+
+    validateContainer.appendChild(
+      validateAction || validateButton
+    );
     fieldContainer.appendChild(testLabel);
     fieldContainer.appendChild(testInput);
 
@@ -220,7 +253,9 @@
       fieldContainer.appendChild(description);
     }
 
-    runContainer.appendChild(runButton);
+    runContainer.appendChild(
+      runAction || runButton
+    );
 
     controls.appendChild(validateContainer);
     controls.appendChild(fieldContainer);

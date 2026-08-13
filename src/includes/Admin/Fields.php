@@ -1505,9 +1505,16 @@ final class Fields {
     string $message,
     string $type
   ): void {
+    $hook = current_action();
+    $message_code =
+      is_string($hook)
+      && str_starts_with($hook, 'admin_post_')
+        ? substr($hook, strlen('admin_post_'))
+        : 'firewall_sync_message';
+
     add_settings_error(
       'firewall_sync_messages',
-      'firewall_sync_message',
+      $message_code,
       $message,
       $type
     );

@@ -416,7 +416,19 @@ final class Settings {
         <input type="hidden" name="firewall_sync_scope" value="<?php echo esc_attr($scope); ?>">
 
         <?php do_settings_sections('firewall-sync-settings'); ?>
-        <?php submit_button(__('Save Settings', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?>
+        <div class="firewall-sync-action-feedback">
+          <?php
+          submit_button(
+            __('Save Settings', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+            'primary',
+            'submit',
+            false
+          );
+          self::render_action_feedback(
+            'firewall_sync_save_settings'
+          );
+          ?>
+        </div>
       </form>
 
       <?php self::render_mode_visibility_script(); ?>
@@ -429,14 +441,19 @@ final class Settings {
         <?php wp_nonce_field('firewall_sync_validate_cf_credentials', 'firewall_sync_validate_cf_credentials_nonce'); ?>
         <input type="hidden" name="action" value="firewall_sync_validate_cf_credentials">
         <input type="hidden" name="firewall_sync_scope" value="<?php echo esc_attr($scope); ?>">
-        <?php
-        submit_button(
-          __('Validate Saved Cloudflare Configuration', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
-          'secondary',
-          'submit',
-          false
-        );
-        ?>
+        <div class="firewall-sync-action-feedback">
+          <?php
+          submit_button(
+            __('Validate Saved Cloudflare Configuration', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+            'secondary',
+            'submit',
+            false
+          );
+          self::render_action_feedback(
+            'firewall_sync_validate_cf_credentials'
+          );
+          ?>
+        </div>
       </form>
 
       <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="firewall-sync-form">
@@ -469,14 +486,19 @@ final class Settings {
           ?>
         </p>
 
-        <?php
-        submit_button(
-          __('Run Test Block', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
-          'secondary',
-          'submit',
-          false
-        );
-        ?>
+        <div class="firewall-sync-action-feedback">
+          <?php
+          submit_button(
+            __('Run Test Block', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+            'secondary',
+            'submit',
+            false
+          );
+          self::render_action_feedback(
+            'firewall_sync_test_block'
+          );
+          ?>
+        </div>
       </form>
 
       <?php self::render_manual_list_management($scope); ?>
@@ -521,17 +543,22 @@ final class Settings {
               value="firewall_sync_network_sync_now"
             >
 
-            <?php
-            submit_button(
-              __(
-                'Synchronise Network Now',
-                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-              ),
-              'primary',
-              'submit',
-              false
-            );
-            ?>
+            <div class="firewall-sync-action-feedback">
+              <?php
+              submit_button(
+                __(
+                  'Synchronise Network Now',
+                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+                ),
+                'primary',
+                'submit',
+                false
+              );
+              self::render_action_feedback(
+                'firewall_sync_network_sync_now'
+              );
+              ?>
+            </div>
           </form>
 
         </div>
@@ -759,7 +786,7 @@ final class Settings {
           ?>
         </p>
 
-        <p class="firewall-sync-manual-list-buttons">
+        <div class="firewall-sync-manual-list-buttons firewall-sync-action-feedback">
           <button
             type="submit"
             name="firewall_sync_list_operation"
@@ -787,7 +814,12 @@ final class Settings {
             );
             ?>
           </button>
-        </p>
+          <?php
+          self::render_action_feedback(
+            'firewall_sync_manual_list_ip'
+          );
+          ?>
+        </div>
       </form>
     </div>
 
@@ -1051,6 +1083,45 @@ final class Settings {
     <?php
   }
 
+  private static function render_action_feedback(
+    string $code,
+    string $setting = 'firewall_sync_messages'
+  ): void {
+    foreach (
+      get_settings_errors($setting)
+      as $details
+    ) {
+      if ((string) ($details['code'] ?? '') !== $code) {
+        continue;
+      }
+
+      $type = (string) ($details['type'] ?? 'error');
+
+      if ($type === 'updated') {
+        $type = 'success';
+      }
+
+      if (
+        !in_array(
+          $type,
+          ['error', 'success', 'warning', 'info'],
+          true
+        )
+      ) {
+        $type = 'error';
+      }
+
+      printf(
+        '<div class="notice notice-%1$s inline firewall-sync-inline-feedback" role="%2$s"><p><strong>%3$s</strong></p></div>',
+        esc_attr($type),
+        esc_attr($type === 'error' ? 'alert' : 'status'),
+        esc_html((string) ($details['message'] ?? ''))
+      );
+
+      return;
+    }
+  }
+
   public static function render_action_button(
     string $action,
     string $label,
@@ -1061,7 +1132,18 @@ final class Settings {
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="firewall-sync-form">
       <?php wp_nonce_field($action, $action . '_nonce'); ?>
       <input type="hidden" name="action" value="<?php echo esc_attr($action); ?>">
-      <?php submit_button($label, $type, $action, false, ['disabled' => $disabled]); ?>
+      <div class="firewall-sync-action-feedback">
+        <?php
+        submit_button(
+          $label,
+          $type,
+          $action,
+          false,
+          ['disabled' => $disabled]
+        );
+        self::render_action_feedback($action);
+        ?>
+      </div>
     </form>
     <?php
   }
@@ -1109,7 +1191,20 @@ final class Settings {
           </tr>
         </table>
 
-        <?php submit_button(__('Block IP', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?>
+        <div class="firewall-sync-action-feedback">
+          <?php
+          submit_button(
+            __('Block IP', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+            'primary',
+            'submit',
+            false
+          );
+          self::render_action_feedback(
+            'firewall_sync_manual_block_message',
+            'firewall_sync_manual_block'
+          );
+          ?>
+        </div>
       </form>
     </div>
     <?php
