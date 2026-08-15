@@ -26,7 +26,7 @@ services:
       - test-network
 
   wordpress:
-    image: wordpress:7.0.1-php8.3-apache
+    image: wordpress:7.0-php8.3-apache
     container_name: greyrock-plugin-test-wordpress
     restart: "no"
     depends_on:

@@ -2,7 +2,7 @@
 Contributors: greyscalezone
 Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 8.1
 Stable tag: 1.3.5
 License: GPLv2 or later

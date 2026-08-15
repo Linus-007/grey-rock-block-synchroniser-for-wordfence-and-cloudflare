@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   wordpress-integration:
-    name: WordPress 7.0 integration test
+    name: WordPress integration test
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
