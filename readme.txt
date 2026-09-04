@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.5
+Stable tag: 1.3.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -465,6 +465,14 @@ No.
 
 == Changelog ==
 
+= 1.3.6 =
+
+* Added sortable Synchronisation Log columns for Site, IP Address, Reason and Recorded time in Network Admin, with IP Address, Reason and Recorded sorting in Site Admin.
+* Added filtering by site, IP address, reason and recorded-date range in Network Admin, with equivalent IP, reason and date filtering in individual site logs.
+* Added Reset controls that restore the unfiltered newest-record-first view.
+* Corrected IP-address sorting so IPv4 and IPv6 addresses are ordered by address value rather than lexical text order.
+* Added regression coverage for Synchronisation Log sorting, filtering, reset behavior and IP-address ordering.
+
 = 1.3.5 =
 
 * Added contextual success and error feedback beside administrative action buttons while retaining the standard WordPress top-of-page notices.
@@ -620,6 +628,10 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.6 =
+Adds sortable and filterable Synchronisation Logs in Site Admin and Network Admin,
+including correct IPv4 and IPv6 address ordering and Reset controls.
 
 = 1.3.4 =
 Corrects multisite Wordfence event attribution, safely permits re-synchronization

@@ -187,7 +187,84 @@ final class Settings {
       );
     }
 
+    $filters = [
+      'site' => '',
+      'ip' => '',
+      'reason' => '',
+      'date_from' => '',
+      'date_to' => '',
+    ];
+    $orderby = 'created_at';
+    $order = 'DESC';
+
+    /*
+     * These are read-only query parameters used to display, sort and filter
+     * synchronisation records. They do not change plugin state.
+     */
+    // phpcs:disable WordPress.Security.NonceVerification.Recommended
+    if (isset($_GET['site'])) {
+      $filters['site'] = sanitize_text_field(
+        wp_unslash($_GET['site'])
+      );
+    }
+
+    if (isset($_GET['ip'])) {
+      $filters['ip'] = sanitize_text_field(
+        wp_unslash($_GET['ip'])
+      );
+    }
+
+    if (isset($_GET['reason'])) {
+      $filters['reason'] = sanitize_text_field(
+        wp_unslash($_GET['reason'])
+      );
+    }
+
+    if (isset($_GET['date_from'])) {
+      $filters['date_from'] = self::sanitize_log_date(
+        sanitize_text_field(
+          wp_unslash($_GET['date_from'])
+        )
+      );
+    }
+
+    if (isset($_GET['date_to'])) {
+      $filters['date_to'] = self::sanitize_log_date(
+        sanitize_text_field(
+          wp_unslash($_GET['date_to'])
+        )
+      );
+    }
+
+    if (isset($_GET['orderby'])) {
+      $requested_orderby = sanitize_key(
+        wp_unslash($_GET['orderby'])
+      );
+
+      if (
+        in_array(
+          $requested_orderby,
+          ['site', 'ip', 'reason', 'created_at'],
+          true
+        )
+      ) {
+        $orderby = $requested_orderby;
+      }
+    }
+
+    if (isset($_GET['order'])) {
+      $requested_order = strtoupper(
+        sanitize_key(wp_unslash($_GET['order']))
+      );
+
+      if (in_array($requested_order, ['ASC', 'DESC'], true)) {
+        $order = $requested_order;
+      }
+    }
+    // phpcs:enable WordPress.Security.NonceVerification.Recommended
+
     $rows = [];
+    $sites = [];
 
     foreach (get_sites(['fields' => 'ids']) as $blog_id) {
       switch_to_blog((int) $blog_id);
@@ -195,12 +272,41 @@ final class Settings {
       try {
         $site_name = get_bloginfo('name');
         $site_url = home_url('/');
+        $site_label = $site_name !== ''
+          ? $site_name
+          : $site_url;
 
-        foreach (BlockLogger::get_logs(100, 0) as $log) {
+        $sites[] = [
+          'id' => (string) $blog_id,
+          'label' => $site_label,
+        ];
+
+        if (
+          $filters['site'] !== ''
+          && $filters['site'] !== (string) $blog_id
+        ) {
+          continue;
+        }
+
+        $site_filters = [
+          'ip' => $filters['ip'],
+          'reason' => $filters['reason'],
+          'date_from' => $filters['date_from'],
+          'date_to' => $filters['date_to'],
+        ];
+
+        foreach (
+          BlockLogger::get_logs(
+            500,
+            0,
+            $site_filters,
+            $orderby === 'site' ? 'created_at' : $orderby,
+            $order
+          ) as $log
+        ) {
           $rows[] = [
-            'site_name' => $site_name !== ''
-              ? $site_name
-              : $site_url,
+            'site_id' => (string) $blog_id,
+            'site_name' => $site_label,
             'site_url' => $site_url,
             'ip' => (string) ($log['ip'] ?? ''),
             'reason' => (string) ($log['reason'] ?? ''),
@@ -214,11 +320,36 @@ final class Settings {
 
     usort(
       $rows,
-      static function (array $left, array $right): int {
-        return strcmp(
-          (string) ($right['created_at'] ?? ''),
-          (string) ($left['created_at'] ?? '')
-        );
+      static function (array $left, array $right) use (
+        $orderby,
+        $order
+      ): int {
+        $key = $orderby === 'site'
+          ? 'site_name'
+          : $orderby;
+
+        if ('ip' === $orderby) {
+          $result = self::compare_log_ip_addresses(
+            (string) ($left['ip'] ?? ''),
+            (string) ($right['ip'] ?? '')
+          );
+        } else {
+          $result = strnatcasecmp(
+            (string) ($left[$key] ?? ''),
+            (string) ($right[$key] ?? '')
+          );
+        }
+
+        if ($result === 0) {
+          $result = strcmp(
+            (string) ($left['created_at'] ?? ''),
+            (string) ($right['created_at'] ?? '')
+          );
+        }
+
+        return $order === 'ASC'
+          ? $result
+          : -$result;
       }
     );
 
@@ -243,6 +374,123 @@ final class Settings {
         ?>
       </p>
 
+      <form method="get">
+        <input
+          type="hidden"
+          name="page"
+          value="firewall-sync-network-log"
+        />
+
+        <div class="tablenav top">
+          <div class="alignleft actions">
+            <label
+              class="screen-reader-text"
+              for="grey-rock-network-site"
+            >
+              <?php
+              echo esc_html__(
+                'Filter by site',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              );
+              ?>
+            </label>
+
+            <select
+              id="grey-rock-network-site"
+              name="site"
+            >
+              <option value="">
+                <?php
+                echo esc_html__(
+                  'All sites',
+                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+                );
+                ?>
+              </option>
+
+              <?php foreach ($sites as $site): ?>
+                <option
+                  value="<?php echo esc_attr($site['id']); ?>"
+                  <?php
+                  selected(
+                    $filters['site'],
+                    $site['id']
+                  );
+                  ?>
+                >
+                  <?php echo esc_html($site['label']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+
+            <input
+              type="text"
+              name="ip"
+              value="<?php echo esc_attr($filters['ip']); ?>"
+              placeholder="<?php echo esc_attr__('IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'); ?>"
+            />
+
+            <input
+              type="text"
+              name="reason"
+              value="<?php echo esc_attr($filters['reason']); ?>"
+              placeholder="<?php echo esc_attr__('Reason contains', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'); ?>"
+            />
+
+            <label for="grey-rock-network-date-from">
+              <?php
+              echo esc_html__(
+                'From',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              );
+              ?>
+            </label>
+            <input
+              type="date"
+              id="grey-rock-network-date-from"
+              name="date_from"
+              value="<?php echo esc_attr($filters['date_from']); ?>"
+            />
+
+            <label for="grey-rock-network-date-to">
+              <?php
+              echo esc_html__(
+                'To',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              );
+              ?>
+            </label>
+            <input
+              type="date"
+              id="grey-rock-network-date-to"
+              name="date_to"
+              value="<?php echo esc_attr($filters['date_to']); ?>"
+            />
+
+            <?php
+            submit_button(
+              __('Filter', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+              'secondary',
+              'filter_action',
+              false
+            );
+            ?>
+
+            <a
+              class="button"
+              href="<?php echo esc_url(network_admin_url('admin.php?page=firewall-sync-network-log')); ?>"
+            >
+              <?php
+              echo esc_html__(
+                'Reset',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              );
+              ?>
+            </a>
+          </div>
+        </div>
+      </form>
+
       <?php if (empty($rows)): ?>
         <p>
           <?php
@@ -256,38 +504,65 @@ final class Settings {
         <table class="widefat striped">
           <thead>
             <tr>
-              <th scope="col">
-                <?php
-                echo esc_html__(
-                  'Site',
-                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              <?php
+              foreach (
+                [
+                  'site' => __('Site', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+                  'ip' => __('IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+                  'reason' => __('Reason', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+                  'created_at' => __('Recorded', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+                ] as $column => $label
+              ) :
+                $next_order = (
+                  $orderby === $column
+                  && $order === 'ASC'
+                )
+                  ? 'DESC'
+                  : 'ASC';
+
+                $sort_url = add_query_arg(
+                  array_filter(
+                    [
+                      'page' => 'firewall-sync-network-log',
+                      'site' => $filters['site'],
+                      'ip' => $filters['ip'],
+                      'reason' => $filters['reason'],
+                      'date_from' => $filters['date_from'],
+                      'date_to' => $filters['date_to'],
+                      'orderby' => $column,
+                      'order' => $next_order,
+                    ],
+                    static fn($value): bool => $value !== ''
+                  ),
+                  network_admin_url('admin.php')
                 );
+
+                $class = 'manage-column sortable';
+
+                if ($orderby === $column) {
+                  $class = 'manage-column sorted ' .
+                    strtolower($order);
+                }
                 ?>
-              </th>
-              <th scope="col">
-                <?php
-                echo esc_html__(
-                  'IP Address',
-                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-                );
-                ?>
-              </th>
-              <th scope="col">
-                <?php
-                echo esc_html__(
-                  'Reason',
-                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-                );
-                ?>
-              </th>
-              <th scope="col">
-                <?php
-                echo esc_html__(
-                  'Recorded',
-                  'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-                );
-                ?>
-              </th>
+                <th
+                  scope="col"
+                  class="<?php echo esc_attr($class); ?>"
+                >
+                  <a href="<?php echo esc_url($sort_url); ?>">
+                    <span><?php echo esc_html($label); ?></span>
+                    <span class="sorting-indicators">
+                      <span
+                        class="sorting-indicator asc"
+                        aria-hidden="true"
+                      ></span>
+                      <span
+                        class="sorting-indicator desc"
+                        aria-hidden="true"
+                      ></span>
+                    </span>
+                  </a>
+                </th>
+              <?php endforeach; ?>
             </tr>
           </thead>
 
@@ -353,9 +628,91 @@ final class Settings {
         ?>
       </p>
 
-      <?php $log_table->display(); ?>
+      <form method="get">
+        <input
+          type="hidden"
+          name="page"
+          value="firewall-sync-log"
+        />
+        <?php $log_table->display(); ?>
+      </form>
     </div>
     <?php
+  }
+
+  private static function compare_log_ip_addresses(
+    string $left,
+    string $right
+  ): int {
+    $left_ipv4 = filter_var(
+      $left,
+      FILTER_VALIDATE_IP,
+      FILTER_FLAG_IPV4
+    ) !== false;
+
+    $right_ipv4 = filter_var(
+      $right,
+      FILTER_VALIDATE_IP,
+      FILTER_FLAG_IPV4
+    ) !== false;
+
+    $left_ipv6 = filter_var(
+      $left,
+      FILTER_VALIDATE_IP,
+      FILTER_FLAG_IPV6
+    ) !== false;
+
+    $right_ipv6 = filter_var(
+      $right,
+      FILTER_VALIDATE_IP,
+      FILTER_FLAG_IPV6
+    ) !== false;
+
+    if ($left_ipv4 && $right_ipv6) {
+      return -1;
+    }
+
+    if ($left_ipv6 && $right_ipv4) {
+      return 1;
+    }
+
+    $left_binary = inet_pton($left);
+    $right_binary = inet_pton($right);
+
+    if (
+      false !== $left_binary
+      && false !== $right_binary
+    ) {
+      return strcmp($left_binary, $right_binary);
+    }
+
+    /*
+     * Stored Grey Rock log addresses should already be validated.
+     * Retain deterministic behavior if legacy invalid data exists.
+     */
+    return strnatcasecmp($left, $right);
+  }
+
+  private static function sanitize_log_date($value): string {
+    if (!is_string($value)) {
+      return '';
+    }
+
+    $value = sanitize_text_field($value);
+
+    $date = \DateTimeImmutable::createFromFormat(
+      '!Y-m-d',
+      $value
+    );
+
+    if (
+      !$date
+      || $date->format('Y-m-d') !== $value
+    ) {
+      return '';
+    }
+
+    return $value;
   }
 
   public static function render_settings(): void {

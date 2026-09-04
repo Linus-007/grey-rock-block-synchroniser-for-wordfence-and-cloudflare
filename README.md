@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.5-blue)
+![Version](https://img.shields.io/badge/version-1.3.6-blue)
 ![Tested with WordPress 7.0.1](https://img.shields.io/badge/WordPress-tested%20with%207.0.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1039,6 +1039,14 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.6
+
+- Added sortable Synchronisation Log columns for Site, IP Address, Reason and Recorded time in Network Admin, with IP Address, Reason and Recorded sorting in Site Admin.
+- Added Network Admin filtering by site, IP address, reason and recorded-date range, with equivalent IP, reason and date filtering for individual site logs.
+- Added Reset controls that restore the default unfiltered view and newest-record-first ordering.
+- Corrected IP-address sorting so IPv4 and IPv6 addresses are ordered by address value rather than lexical text order.
+- Added regression coverage for Synchronisation Log sorting, filtering, reset behavior and IP-address ordering.
 
 ### 1.3.5
 

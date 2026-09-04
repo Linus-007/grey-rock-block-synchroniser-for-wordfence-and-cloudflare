@@ -85,18 +85,153 @@ final class BlockLogger {
 
   public static function get_logs(
     int $limit = 20,
-    int $offset = 0
+    int $offset = 0,
+    array $filters = [],
+    string $orderby = 'created_at',
+    string $order = 'DESC'
   ): array {
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
 
+    $ip = isset($filters['ip'])
+      ? trim((string) $filters['ip'])
+      : '';
+
+    $reason = isset($filters['reason'])
+      ? trim((string) $filters['reason'])
+      : '';
+
+    $reason_like = $reason === ''
+      ? ''
+      : '%' . $wpdb->esc_like($reason) . '%';
+
+    $date_from = isset($filters['date_from'])
+      && self::is_log_date((string) $filters['date_from'])
+        ? (string) $filters['date_from'] . ' 00:00:00'
+        : '';
+
+    $date_to = isset($filters['date_to'])
+      && self::is_log_date((string) $filters['date_to'])
+        ? (string) $filters['date_to'] . ' 23:59:59'
+        : '';
+
+    $allowed_orderby = [
+      'ip' => 'ip',
+      'reason' => 'reason',
+      'created_at' => 'created_at',
+    ];
+
+    $orderby_sql = $allowed_orderby[$orderby] ?? 'created_at';
+    $ascending = 'ASC' === strtoupper($order);
+
+    /*
+     * IP addresses must not be sorted as strings. INET6_ATON() produces
+     * binary address values for both IPv4 and IPv6. The first ORDER BY
+     * expression keeps the two address families grouped predictably.
+     */
+    if ('ip' === $orderby_sql) {
+      if ($ascending) {
+        return $wpdb->get_results(
+          $wpdb->prepare(
+            "SELECT ip, reason, created_at
+             FROM %i
+             WHERE (%s = '' OR ip = %s)
+               AND (%s = '' OR reason LIKE %s)
+               AND (%s = '' OR created_at >= %s)
+               AND (%s = '' OR created_at <= %s)
+             ORDER BY (LOCATE(':', ip) > 0) ASC, INET6_ATON(ip) ASC
+             LIMIT %d OFFSET %d",
+            $table,
+            $ip,
+            $ip,
+            $reason,
+            $reason_like,
+            $date_from,
+            $date_from,
+            $date_to,
+            $date_to,
+            $limit,
+            $offset
+          ),
+          ARRAY_A
+        );
+      }
+
+      return $wpdb->get_results(
+        $wpdb->prepare(
+          "SELECT ip, reason, created_at
+           FROM %i
+           WHERE (%s = '' OR ip = %s)
+             AND (%s = '' OR reason LIKE %s)
+             AND (%s = '' OR created_at >= %s)
+             AND (%s = '' OR created_at <= %s)
+           ORDER BY (LOCATE(':', ip) > 0) DESC, INET6_ATON(ip) DESC
+           LIMIT %d OFFSET %d",
+          $table,
+          $ip,
+          $ip,
+          $reason,
+          $reason_like,
+          $date_from,
+          $date_from,
+          $date_to,
+          $date_to,
+          $limit,
+          $offset
+        ),
+        ARRAY_A
+      );
+    }
+
+    if ($ascending) {
+      return $wpdb->get_results(
+        $wpdb->prepare(
+          "SELECT ip, reason, created_at
+           FROM %i
+           WHERE (%s = '' OR ip = %s)
+             AND (%s = '' OR reason LIKE %s)
+             AND (%s = '' OR created_at >= %s)
+             AND (%s = '' OR created_at <= %s)
+           ORDER BY %i ASC
+           LIMIT %d OFFSET %d",
+          $table,
+          $ip,
+          $ip,
+          $reason,
+          $reason_like,
+          $date_from,
+          $date_from,
+          $date_to,
+          $date_to,
+          $orderby_sql,
+          $limit,
+          $offset
+        ),
+        ARRAY_A
+      );
+    }
+
     return $wpdb->get_results(
       $wpdb->prepare(
         "SELECT ip, reason, created_at
-         FROM {$table}
-         ORDER BY created_at DESC
+         FROM %i
+         WHERE (%s = '' OR ip = %s)
+           AND (%s = '' OR reason LIKE %s)
+           AND (%s = '' OR created_at >= %s)
+           AND (%s = '' OR created_at <= %s)
+         ORDER BY %i DESC
          LIMIT %d OFFSET %d",
+        $table,
+        $ip,
+        $ip,
+        $reason,
+        $reason_like,
+        $date_from,
+        $date_from,
+        $date_to,
+        $date_to,
+        $orderby_sql,
         $limit,
         $offset
       ),
@@ -104,14 +239,64 @@ final class BlockLogger {
     );
   }
 
-  public static function count(): int {
+  public static function count(array $filters = []): int {
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
 
+    $ip = isset($filters['ip'])
+      ? trim((string) $filters['ip'])
+      : '';
+
+    $reason = isset($filters['reason'])
+      ? trim((string) $filters['reason'])
+      : '';
+
+    $reason_like = $reason === ''
+      ? ''
+      : '%' . $wpdb->esc_like($reason) . '%';
+
+    $date_from = isset($filters['date_from'])
+      && self::is_log_date((string) $filters['date_from'])
+        ? (string) $filters['date_from'] . ' 00:00:00'
+        : '';
+
+    $date_to = isset($filters['date_to'])
+      && self::is_log_date((string) $filters['date_to'])
+        ? (string) $filters['date_to'] . ' 23:59:59'
+        : '';
+
     return (int) $wpdb->get_var(
-      "SELECT COUNT(*) FROM {$table}"
+      $wpdb->prepare(
+        "SELECT COUNT(*)
+         FROM %i
+         WHERE (%s = '' OR ip = %s)
+           AND (%s = '' OR reason LIKE %s)
+           AND (%s = '' OR created_at >= %s)
+           AND (%s = '' OR created_at <= %s)",
+        [
+          $table,
+          $ip,
+          $ip,
+          $reason,
+          $reason_like,
+          $date_from,
+          $date_from,
+          $date_to,
+          $date_to,
+        ]
+      )
     );
+  }
+
+  private static function is_log_date(string $value): bool {
+    $date = \DateTimeImmutable::createFromFormat(
+      '!Y-m-d',
+      $value
+    );
+
+    return $date instanceof \DateTimeImmutable
+      && $date->format('Y-m-d') === $value;
   }
 
   /**

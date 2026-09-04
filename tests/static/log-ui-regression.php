@@ -103,7 +103,7 @@ $require(
 $require(
   str_contains(
     $contents['settings'],
-    'foreach (BlockLogger::get_logs(100, 0) as $log)'
+    'BlockLogger::get_logs('
   ),
   'Network Admin must read each site log.'
 );
@@ -197,6 +197,136 @@ foreach (['readme', 'wp_readme'] as $document) {
     $document . ' must document network log scope.'
   );
 }
+
+$require(
+  str_contains(
+    $contents['table'],
+    'get_sortable_columns'
+  ),
+  'Site LogTable must provide sortable columns.'
+);
+
+foreach (['ip', 'reason', 'created_at'] as $column) {
+  $require(
+    str_contains(
+      $contents['table'],
+      "'" . $column . "'"
+    ),
+    'Site LogTable must expose the ' . $column . ' column.'
+  );
+}
+
+$require(
+  str_contains(
+    $contents['table'],
+    'Reason contains'
+  ),
+  'Site LogTable must provide the reason filter.'
+);
+
+$require(
+  str_contains(
+    $contents['table'],
+    "'date_from'"
+  ),
+  'Site LogTable must provide the From date filter.'
+);
+
+$require(
+  str_contains(
+    $contents['table'],
+    "'date_to'"
+  ),
+  'Site LogTable must provide the To date filter.'
+);
+
+$require(
+  str_contains(
+    $contents['table'],
+    "'Reset'"
+  ),
+  'Site LogTable must provide Reset.'
+);
+
+$require(
+  str_contains(
+    $contents['logger'],
+    "WHERE (%s = '' OR ip = %s)"
+  )
+  && str_contains(
+    $contents['logger'],
+    "reason LIKE %s"
+  )
+  && str_contains(
+    $contents['logger'],
+    "created_at >= %s"
+  )
+  && str_contains(
+    $contents['logger'],
+    "created_at <= %s"
+  ),
+  'BlockLogger must implement server-side log filtering.'
+);
+
+$require(
+  str_contains(
+    $contents['logger'],
+    '$allowed_orderby'
+  ),
+  'BlockLogger must allow-list sortable database columns.'
+);
+
+$require(
+  str_contains(
+    $contents['logger'],
+    "reason LIKE %s"
+  ),
+  'BlockLogger must support reason substring filtering.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    "'All sites'"
+  ),
+  'Network Synchronisation Log must provide an All sites filter.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    "'orderby' => \$column"
+  ),
+  'Network Synchronisation Log must provide sortable headings.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    "network_admin_url('admin.php?page=firewall-sync-network-log')"
+  ),
+  'Network Synchronisation Log must provide a reset target.'
+);
+
+$require(
+  str_contains(
+    $contents['logger'],
+    'INET6_ATON(ip)'
+  ),
+  'Site Synchronisation Log must sort IP addresses by binary address value.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    'compare_log_ip_addresses'
+  )
+  && str_contains(
+    $contents['settings'],
+    'inet_pton'
+  ),
+  'Network Synchronisation Log must sort IP addresses by address value rather than text.'
+);
 
 if ($failures !== []) {
   foreach ($failures as $failure) {
