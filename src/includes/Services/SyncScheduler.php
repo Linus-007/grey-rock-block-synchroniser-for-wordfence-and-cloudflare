@@ -570,6 +570,7 @@ final class SyncScheduler {
       $reason = (string) $block->reason;
       $expiration = (int) $block->expiration;
       $blocked_time = (int) $block->blockedTime;
+      $block_type = (int) $block->type;
       $is_permanent = (
         $expiration === \wfBlock::DURATION_FOREVER
       );
@@ -616,6 +617,30 @@ final class SyncScheduler {
         continue;
       }
 
+      $record_local = true;
+
+      if (
+        is_multisite()
+        && Config::uses_network_options()
+        && self::requires_site_active_attribution($block_type)
+      ) {
+        $record_local = HistoricalBlockReader::
+          has_active_block_evidence(
+            $ip,
+            $blocked_time,
+            self::get_site_hosts()
+          );
+
+        if ($record_local === null) {
+          self::$lastErrorMessage = __(
+            'Wordfence active-block attribution evidence could not be read completely.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+
+          return false;
+        }
+      }
+
       $expires_at = null;
 
       if (!$is_permanent && $expiration > 0) {
@@ -630,6 +655,7 @@ final class SyncScheduler {
         'ip' => $ip,
         'reason' => (string) $reason,
         'expires_at' => $expires_at,
+        'record_local' => $record_local,
       ];
     }
 
@@ -695,6 +721,7 @@ final class SyncScheduler {
 
       $batch_by_ip[$ip] = [
         'ip' => $ip,
+        'record_local' => true,
         'reason' => sprintf(
           /* translators: %d: number of blocked WAF events */
           _n(
@@ -806,6 +833,20 @@ final class SyncScheduler {
     return array_values(array_unique($hosts));
   }
 
+  private static function requires_site_active_attribution(
+    int $block_type
+  ): bool {
+    return in_array(
+      $block_type,
+      [
+        \wfBlock::TYPE_RATE_BLOCK,
+        \wfBlock::TYPE_RATE_THROTTLE,
+        \wfBlock::TYPE_IP_AUTOMATIC_TEMPORARY,
+      ],
+      true
+    );
+  }
+
   private static function active_evidence_is_newer(
     int $blocked_time,
     int $watermark
@@ -847,15 +888,26 @@ final class SyncScheduler {
     array $failed
   ): void {
     foreach ($batch as $entry) {
+      $record_local = !array_key_exists(
+        'record_local',
+        $entry
+      ) || (bool) $entry['record_local'];
+
       $log_reason = 'sync: ' . $entry['reason'];
 
       if (in_array($entry['ip'], $failed, true)) {
-        BlockLogger::mark_failed(
-          $entry['ip'],
-          $log_reason,
-          $entry['expires_at']
-        );
+        if ($record_local) {
+          BlockLogger::mark_failed(
+            $entry['ip'],
+            $log_reason,
+            $entry['expires_at']
+          );
+        }
 
+        continue;
+      }
+
+      if (!$record_local) {
         continue;
       }
 

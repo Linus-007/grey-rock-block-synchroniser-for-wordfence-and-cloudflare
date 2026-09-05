@@ -318,6 +318,90 @@ shared_assert(
 
 echo "Multisite shared-IP attribution regression: PASS\n";
 
+/*
+ * Active Wordfence blocks are network-wide, but the Grey Rock log must
+ * remain attributable to the site whose wfHits URL owns the attack.
+ */
+$site_logs = [1 => [], 2 => [], 3 => []];
+$cloudflare_items = [];
+$cloudflare_create_count = 0;
+$active_blocked_time = time() - 60;
+$wpdb->history_rows = [
+  [
+    'ip_hex' => shared_wf_hex($shared_ip),
+    'event_time' => $active_blocked_time + 5,
+    'event_url' => 'https://site-a.example/rate-limit-attack',
+  ],
+];
+
+$current_blog_id = 1;
+$site_a_active = WPCF\FirewallSync\Services\HistoricalBlockReader::
+  has_active_block_evidence(
+    $shared_ip,
+    $active_blocked_time,
+    ['site-a.example']
+  );
+
+$current_blog_id = 2;
+$site_b_active = WPCF\FirewallSync\Services\HistoricalBlockReader::
+  has_active_block_evidence(
+    $shared_ip,
+    $active_blocked_time,
+    ['site-b.example']
+  );
+
+shared_assert(
+  $site_a_active === true,
+  'Active Wordfence evidence was not attributed to Site A.'
+);
+shared_assert(
+  $site_b_active === false,
+  'Active Wordfence evidence was falsely attributed to Site B.'
+);
+
+$current_blog_id = 1;
+$sync_batch->invoke(
+  null,
+  new WPCF\FirewallSync\Cloudflare\Client('token', ''),
+  $account_id,
+  $list_id,
+  [[
+    'ip' => $shared_ip,
+    'reason' => 'Rate-limit attack',
+    'expires_at' => null,
+    'record_local' => true,
+  ]]
+);
+
+$current_blog_id = 2;
+$sync_batch->invoke(
+  null,
+  new WPCF\FirewallSync\Cloudflare\Client('token', ''),
+  $account_id,
+  $list_id,
+  [[
+    'ip' => $shared_ip,
+    'reason' => 'Rate-limit attack',
+    'expires_at' => null,
+    'record_local' => false,
+  ]]
+);
+
+shared_assert(
+  $cloudflare_create_count === 1,
+  'Active shared block caused more than one Cloudflare create operation.'
+);
+shared_assert(
+  isset($site_logs[1][$shared_ip]),
+  'Attributable active block was not logged for Site A.'
+);
+shared_assert(
+  !isset($site_logs[2][$shared_ip]),
+  'Unattributable active block was incorrectly logged for Site B.'
+);
+
+echo "Multisite active-block attribution regression: PASS\n";
+
 /* A site success must not clear a network reset needed by a later site. */
 $site_logs = [1 => [], 2 => [], 3 => []];
 $cloudflare_items = [];

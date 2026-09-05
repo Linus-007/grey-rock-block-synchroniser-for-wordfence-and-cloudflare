@@ -3,9 +3,9 @@
  * Plugin Name: Grey Rock Block Synchroniser for Wordfence and Cloudflare
  * Plugin URI: https://github.com/Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare
  * Description: Synchronises current and historical Wordfence firewall blocks with Cloudflare Zone Access Rules or an account-level IP list.
- * Version: 1.3.6
+ * Version: 1.3.7
  * Requires at least: 6.0
- * Tested up to: 7.0
+ * Tested up to: 7.1
  * Requires PHP: 8.1
  * Author: Greyscale Zone
  * Author URI: https://greyscale.zone/

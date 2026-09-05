@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.6
+Stable tag: 1.3.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -464,6 +464,13 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.7 =
+* Fixed multisite attribution for active Wordfence automatic and rate-limit blocks.
+* Active network-wide Wordfence blocks are now logged only for the site with matching Wordfence request evidence.
+* Preserved network-wide Cloudflare enforcement while preventing false synchronization-log attribution across unrelated sites.
+* Added regression coverage for active-block multisite attribution.
+
 
 = 1.3.6 =
 

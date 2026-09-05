@@ -17,6 +17,7 @@ namespace WPCF\FirewallSync\Services;
  */
 final class HistoricalBlockReader {
   private const WORDFENCE_ACTION = 'blocked:waf';
+  private const WORDFENCE_ACTIVE_ACTION = 'blocked:wordfence';
 
   /**
    * Read historical Wordfence WAF blocks from the shared hits table.
@@ -144,6 +145,87 @@ final class HistoricalBlockReader {
     return $candidates;
   }
 
+  /**
+   * Determine whether an active network-wide Wordfence block has request
+   * evidence attributable to the current WordPress site.
+   *
+   * Wordfence stores active blocks in a network table on multisite. The
+   * corresponding wfHits rows retain the request URL and therefore the
+   * originating site hostname.
+   *
+   * Null means Wordfence evidence could not be read completely.
+   */
+  public static function has_active_block_evidence(
+    string $ip,
+    int $blocked_time,
+    array $site_hosts = []
+  ): ?bool {
+    global $wpdb;
+
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
+
+    if ($ip === '' || $blocked_time <= 0) {
+      return false;
+    }
+
+    $hosts = self::normalize_hosts($site_hosts);
+
+    if (empty($hosts)) {
+      return false;
+    }
+
+    $table = \wfDB::networkTable('wfHits');
+
+    $table_exists = $wpdb->get_var(
+      $wpdb->prepare(
+        'SHOW TABLES LIKE %s',
+        $wpdb->esc_like($table)
+      )
+    );
+
+    if ($table_exists !== $table) {
+      return null;
+    }
+
+    $ip_hex = self::encode_wordfence_ip_hex($ip);
+
+    if ($ip_hex === null) {
+      return false;
+    }
+
+    $rows = $wpdb->get_results(
+      $wpdb->prepare(
+        "SELECT
+          URL AS event_url
+        FROM {$table}
+        WHERE action = %s
+          AND HEX(IP) = %s
+          AND ctime >= %f
+        ORDER BY ctime DESC",
+        self::WORDFENCE_ACTIVE_ACTION,
+        $ip_hex,
+        (float) $blocked_time
+      ),
+      ARRAY_A
+    );
+
+    if (!is_array($rows)) {
+      return null;
+    }
+
+    foreach ($rows as $row) {
+      $event_host = self::host_from_url(
+        (string) ($row['event_url'] ?? '')
+      );
+
+      if ($event_host !== null && isset($hosts[$event_host])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   /** @return array<string, bool> */
   private static function normalize_hosts(array $hosts): array {
     $normalized = [];
@@ -167,6 +249,22 @@ final class HistoricalBlockReader {
     }
 
     return strtolower(rtrim($host, '.'));
+  }
+
+  private static function encode_wordfence_ip_hex(
+    string $ip
+  ): ?string {
+    $binary = inet_pton($ip);
+
+    if ($binary === false) {
+      return null;
+    }
+
+    if (strlen($binary) === 4) {
+      $binary = str_repeat("\0", 10) . "\xff\xff" . $binary;
+    }
+
+    return strtoupper(bin2hex($binary));
   }
 
   private static function decode_wordfence_ip(
