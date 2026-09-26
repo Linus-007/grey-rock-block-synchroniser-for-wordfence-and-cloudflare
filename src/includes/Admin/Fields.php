@@ -8,8 +8,10 @@ use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Config;
 use WPCF\FirewallSync\Plugin;
 use WPCF\FirewallSync\Services\BlockLogger;
+use WPCF\FirewallSync\Services\BlockOwnership;
 use WPCF\FirewallSync\Services\IpValidator;
 use WPCF\FirewallSync\Services\DnsAllowList;
+use WPCF\FirewallSync\Services\NetworkManualOwnershipStore;
 use WPCF\FirewallSync\Services\Reconciler;
 use WPCF\FirewallSync\Services\ResetWatermarkStore;
 use WPCF\FirewallSync\Services\SyncScheduler;
@@ -972,12 +974,30 @@ final class Fields {
       );
 
       if ($already_exists) {
+        $ownership_recorded = $scope === 'network'
+          ? NetworkManualOwnershipStore::add($ip)
+          : BlockOwnership::add(
+            $ip,
+            BlockOwnership::OWNER_MANUAL
+          );
+
+        if (!$ownership_recorded) {
+          self::redirect_with_message(
+            $scope,
+            __(
+              'The IP address already exists in Cloudflare, but Grey Rock could not record manual ownership safely.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            'error'
+          );
+        }
+
         self::redirect_with_message(
           $scope,
           sprintf(
             /* translators: 1: IP address, 2: Cloudflare list name. */
             __(
-              'IP address %1$s already exists in Cloudflare list %2$s.',
+              'IP address %1$s already exists in Cloudflare list %2$s and is now recorded as a manual Grey Rock block.',
               'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
             ),
             $ip,
@@ -994,6 +1014,22 @@ final class Fields {
         'Manual Grey Rock block: ' . $reason
       );
 
+      if ($success) {
+        $success = $scope === 'network'
+          ? NetworkManualOwnershipStore::add($ip)
+          : BlockOwnership::add(
+            $ip,
+            BlockOwnership::OWNER_MANUAL
+          );
+
+        if (!$success) {
+          $failure_message = __(
+            'Cloudflare added the address, but Grey Rock could not record manual ownership safely.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+        }
+      }
+
       $success_message = sprintf(
         /* translators: 1: IP address, 2: Cloudflare list name. */
         __(
@@ -1004,10 +1040,12 @@ final class Fields {
         $list_name
       );
 
-      $failure_message = __(
-        'The IP address could not be added to the Cloudflare list.',
-        'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-      );
+      if (!isset($failure_message)) {
+        $failure_message = __(
+          'The IP address could not be added to the Cloudflare list.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+      }
     } else {
       $success = $client->remove_ip_from_account_list(
         $account_id,
@@ -1059,15 +1097,21 @@ final class Fields {
     string $ip
   ): bool {
     if ($scope !== 'network') {
-      if (ResetWatermarkStore::set($ip, time())) {
-        return BlockLogger::remove($ip);
+      if (!ResetWatermarkStore::set($ip, time())) {
+        return false;
       }
 
-      return false;
+      if (!BlockLogger::remove($ip)) {
+        return false;
+      }
+
+      return BlockOwnership::remove(
+        $ip,
+        BlockOwnership::OWNER_MANUAL
+      );
     }
 
     $watermark_set = false;
-
     $removed = true;
 
     foreach (get_sites(['fields' => 'ids']) as $blog_id) {
@@ -1090,7 +1134,11 @@ final class Fields {
       }
     }
 
-    return $watermark_set && $removed;
+    if (!$watermark_set || !$removed) {
+      return false;
+    }
+
+    return NetworkManualOwnershipStore::remove($ip);
   }
 
   public static function handle_network_sync_now(): void {
@@ -1398,6 +1446,21 @@ final class Fields {
     }
 
     if ($success) {
+      if (
+        !BlockOwnership::add(
+          $ip,
+          BlockOwnership::OWNER_MANUAL
+        )
+      ) {
+        self::redirect_manual_block(
+          __(
+            'Cloudflare blocked the address, but Grey Rock could not record manual ownership safely.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          'error'
+        );
+      }
+
       BlockLogger::log($ip, 'manual: ' . $reason);
 
       self::redirect_manual_block(

@@ -936,6 +936,29 @@ final class Settings {
         <h2><?php echo esc_html(__('Last Sync Time', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h2>
         <p><?php echo esc_html($last_sync_time); ?></p>
 
+        <?php
+        $last_sync_result =
+          SyncScheduler::get_last_persisted_result();
+        $last_sync_error =
+          SyncScheduler::get_last_persisted_error();
+        ?>
+
+        <h2><?php echo esc_html(__('Last Sync Status', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h2>
+        <p>
+          <?php
+          echo esc_html(
+            $last_sync_result !== ''
+              ? ucfirst($last_sync_result)
+              : __('Unknown', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+          );
+          ?>
+        </p>
+
+        <?php if ($last_sync_error !== ''): ?>
+          <h2><?php echo esc_html(__('Last Sync Error', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h2>
+          <p><?php echo esc_html($last_sync_error); ?></p>
+        <?php endif; ?>
+
         <div class="firewall-sync-actions">
           <h2><?php echo esc_html(__('Site Actions', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h2>
 
@@ -1485,6 +1508,11 @@ final class Settings {
     string $type = 'secondary',
     string $disabled = ''
   ): void {
+    $attributes = [];
+
+    if ($disabled !== '') {
+      $attributes['disabled'] = 'disabled';
+    }
     ?>
     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="firewall-sync-form">
       <?php wp_nonce_field($action, $action . '_nonce'); ?>
@@ -1496,7 +1524,7 @@ final class Settings {
           $type,
           $action,
           false,
-          ['disabled' => $disabled]
+          $attributes
         );
         self::render_action_feedback($action);
         ?>

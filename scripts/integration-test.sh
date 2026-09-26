@@ -10,12 +10,29 @@ PROJECT_NAME="greyrock-plugin-test"
 TEST_URL="http://127.0.0.1:18080"
 TEST_PORT="18080"
 PLUGIN_SLUG="grey-rock-block-synchroniser-for-wordfence-and-cloudflare"
+CACHE_DIR="${HOME}/.cache/grey-rock-tests"
+SESSION_ENV="$CACHE_DIR/session.env"
+SESSION_RESOLVER="$REPO_ROOT/scripts/resolve-test-session.sh"
 
-mkdir -p "$REPORT_DIR" "$REPO_ROOT/.tools"
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    echo "ERROR: Do not run integration-test.sh with sudo." >&2
+    echo "Run it as the normal APP user; the script elevates only commands that require it." >&2
+    exit 1
+fi
+
+mkdir -p "$REPORT_DIR" "$REPO_ROOT/.tools" "$CACHE_DIR"
 rm -f "$REPORT_DIR"/*
 
 test -f "$COMPOSE_FILE"
 test -f "$PLUGIN_ZIP"
+test -x "$SESSION_RESOLVER"
+
+if [[ ! -f "$SESSION_ENV" ]]; then
+    "$SESSION_RESOLVER" --refresh >/dev/null
+fi
+
+# shellcheck disable=SC1090
+source "$SESSION_ENV"
 
 for command_name in sudo docker curl openssl python3; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -51,7 +68,13 @@ cat > "$RUNTIME_ENV" <<EOF
 TEST_DB_PASSWORD=$(openssl rand -hex 24)
 TEST_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
 PLUGIN_ZIP=$PLUGIN_ZIP
+INTEGRATION_TEST_FILE=$REPO_ROOT/tests/integration/admin-action-button-test.php
+WORDFENCE_PROBE_FILE=$REPO_ROOT/tests/integration/wordfence-block-api-probe.php
+OWNERSHIP_MIGRATION_TEST_FILE=$REPO_ROOT/tests/integration/ownership-migration-test.php
+MANUAL_REMOVAL_OWNERSHIP_TEST_FILE=$REPO_ROOT/tests/integration/manual-removal-ownership-test.php
 EOF
+
+cat "$SESSION_ENV" >> "$RUNTIME_ENV"
 
 COMPOSE=(
     sudo docker compose
@@ -93,8 +116,19 @@ sudo systemctl start \
 
 sudo docker info >/dev/null
 
-echo "===== PULL TEST IMAGES ====="
-"${COMPOSE[@]}" pull db wordpress cli
+SESSION_HASH="$(sha256sum "$SESSION_ENV" | cut -d " " -f 1)"
+IMAGE_CACHE_MARKER="$CACHE_DIR/images-ready.$SESSION_HASH"
+
+if [[ -f "$IMAGE_CACHE_MARKER" ]]; then
+    echo "===== REUSE TEST SESSION IMAGES ====="
+    printf "WordPress: %s\n" "$WORDPRESS_IMAGE"
+    printf "WP-CLI:    %s\n" "$WPCLI_IMAGE"
+    printf "MariaDB:   %s\n" "$MARIADB_IMAGE"
+else
+    echo "===== PULL TEST SESSION IMAGES ====="
+    "${COMPOSE[@]}" pull db wordpress cli
+    touch "$IMAGE_CACHE_MARKER"
+fi
 
 echo "===== START WORDPRESS TEST STACK ====="
 "${COMPOSE[@]}" up --detach db wordpress
@@ -155,6 +189,10 @@ echo "===== VERIFY WORDPRESS AND PLUGINS ====="
     core version |
     tee "$REPORT_DIR/wordpress-version.txt"
 
+"${COMPOSE[@]}" exec --no-TTY wordpress \
+    php -r "echo PHP_VERSION, PHP_EOL;" |
+    tee "$REPORT_DIR/php-version.txt"
+
 "${COMPOSE[@]}" run --rm --no-TTY cli \
     plugin list --format=table |
     tee "$REPORT_DIR/plugin-list.txt"
@@ -163,7 +201,36 @@ echo "===== VERIFY WORDPRESS AND PLUGINS ====="
     plugin is-active wordfence
 
 "${COMPOSE[@]}" run --rm --no-TTY cli \
+    plugin get wordfence --field=version |
+    tee "$REPORT_DIR/wordfence-version.txt"
+
+"${COMPOSE[@]}" run --rm --no-TTY cli \
+    cli version |
+    sed -E 's/^WP-CLI[[:space:]]+//' |
+    tee "$REPORT_DIR/wpcli-version.txt"
+
+"${COMPOSE[@]}" exec --no-TTY db \
+    mariadb --version |
+    tee "$REPORT_DIR/mariadb-version.txt"
+
+"${COMPOSE[@]}" run --rm --no-TTY cli \
     plugin is-active "$PLUGIN_SLUG"
+
+echo "===== ADMIN ACTION BUTTON INTEGRATION ====="
+"${COMPOSE[@]}" run --rm --no-TTY cli \
+    eval-file /artifacts/admin-action-button-test.php
+
+echo "===== OWNERSHIP MIGRATION INTEGRATION ====="
+"${COMPOSE[@]}" run --rm --no-TTY cli \
+    eval-file /artifacts/ownership-migration-test.php
+
+echo "===== MANUAL REMOVAL OWNERSHIP INTEGRATION ====="
+"${COMPOSE[@]}" run --rm --no-TTY cli \
+    eval-file /artifacts/manual-removal-ownership-test.php
+
+echo "===== WORDFENCE BLOCK API PROBE ====="
+"${COMPOSE[@]}" run --rm --no-TTY cli \
+    eval-file /artifacts/wordfence-block-api-probe.php
 
 "${COMPOSE[@]}" run --rm --no-TTY cli \
     plugin get "$PLUGIN_SLUG" --field=version |
@@ -228,10 +295,48 @@ fi
 
 plugin_version="$(tr -d '\r\n' < "$REPORT_DIR/greyrock-version.txt")"
 wordpress_version="$(tr -d '\r\n' < "$REPORT_DIR/wordpress-version.txt")"
+php_version="$(tr -d '\r\n' < "$REPORT_DIR/php-version.txt")"
+wordfence_version="$(tr -d '\r\n' < "$REPORT_DIR/wordfence-version.txt")"
+wpcli_version="$(tr -d '\r\n' < "$REPORT_DIR/wpcli-version.txt")"
+mariadb_version="$(tr -d '\r\n' < "$REPORT_DIR/mariadb-version.txt")"
+
+if [[ "$wordpress_version" != "$EXPECTED_WORDPRESS_VERSION" ]]; then
+    echo "ERROR: WordPress version mismatch." >&2
+    printf "Expected: %s\nActual:   %s\n"         "$EXPECTED_WORDPRESS_VERSION"         "$wordpress_version" >&2
+    exit 1
+fi
+
+if [[ "$php_version" != "$EXPECTED_PHP_VERSION" ]]; then
+    echo "ERROR: PHP version mismatch." >&2
+    printf "Expected: %s\nActual:   %s\n" \
+        "$EXPECTED_PHP_VERSION" \
+        "$php_version" >&2
+    exit 1
+fi
+
+if [[ "$wordfence_version" != "$EXPECTED_WORDFENCE_VERSION" ]]; then
+    echo "ERROR: Wordfence version mismatch." >&2
+    printf "Expected: %s\nActual:   %s\n" \
+        "$EXPECTED_WORDFENCE_VERSION" \
+        "$wordfence_version" >&2
+    exit 1
+fi
+
+if [[ "$wpcli_version" != "$EXPECTED_WPCLI_VERSION" ]]; then
+    echo "ERROR: WP-CLI version mismatch." >&2
+    printf "Expected: %s\nActual:   %s\n" \
+        "$EXPECTED_WPCLI_VERSION" \
+        "$wpcli_version" >&2
+    exit 1
+fi
 
 cat > "$REPORT_DIR/summary.txt" <<EOF
 RESULT=PASS
 WORDPRESS_VERSION=$wordpress_version
+PHP_VERSION=$php_version
+WORDFENCE_VERSION=$wordfence_version
+WPCLI_VERSION=$wpcli_version
+MARIADB_VERSION=$mariadb_version
 GREYROCK_PLUGIN_VERSION=$plugin_version
 WORDFENCE_ACTIVE=yes
 GREYROCK_PLUGIN_ACTIVE=yes

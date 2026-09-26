@@ -11,6 +11,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/tests/docker/compose.yml"
 PLUGIN_ZIP="$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip"
 PHP_TEST="$REPO_ROOT/tests/integration/cloudflare-live-test.php"
+CACHE_DIR="${HOME}/.cache/grey-rock-tests"
+SESSION_ENV="$CACHE_DIR/session.env"
+SESSION_RESOLVER="$REPO_ROOT/scripts/resolve-test-session.sh"
+INTEGRATION_TEST_FILE="$REPO_ROOT/tests/integration/admin-action-button-test.php"
+WORDFENCE_PROBE_FILE="$REPO_ROOT/tests/integration/wordfence-block-api-probe.php"
+OWNERSHIP_MIGRATION_TEST_FILE="$REPO_ROOT/tests/integration/ownership-migration-test.php"
+MANUAL_REMOVAL_OWNERSHIP_TEST_FILE="$REPO_ROOT/tests/integration/manual-removal-ownership-test.php"
 CONFIG_FILE="/etc/greyrock-plugin-cloudflare-test.env"
 REPORT_DIR="$REPO_ROOT/reports/cloudflare-integration"
 PROJECT_NAME="greyrock-cloudflare-live"
@@ -77,6 +84,11 @@ for required_file in \
 	"$COMPOSE_FILE" \
 	"$PLUGIN_ZIP" \
 	"$PHP_TEST" \
+	"$SESSION_RESOLVER" \
+	"$INTEGRATION_TEST_FILE" \
+	"$WORDFENCE_PROBE_FILE" \
+	"$OWNERSHIP_MIGRATION_TEST_FILE" \
+	"$MANUAL_REMOVAL_OWNERSHIP_TEST_FILE" \
 	"$CONFIG_FILE"
 do
 	if [[ ! -f "$required_file" ]]; then
@@ -96,6 +108,20 @@ if [[ "$(stat --format='%a' "$CONFIG_FILE")" != "600" ]]; then
 fi
 
 # shellcheck disable=SC1090
+mkdir -p "$CACHE_DIR"
+
+if [[ ! -x "$SESSION_RESOLVER" ]]; then
+        echo "ERROR: Test-session resolver is not executable." >&2
+        exit 1
+fi
+
+"$SESSION_RESOLVER" --refresh >/dev/null
+
+if [[ ! -f "$SESSION_ENV" ]]; then
+        echo "ERROR: Test-session environment was not created." >&2
+        exit 1
+fi
+
 source "$CONFIG_FILE"
 
 if [[ "$CLOUDFLARE_LIST_ID" != "$EXPECTED_LIST_ID" ]]; then
@@ -175,9 +201,15 @@ cat > "$RUNTIME_ENV" <<EOF
 TEST_DB_PASSWORD=$(openssl rand -hex 24)
 TEST_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
 PLUGIN_ZIP=$PLUGIN_ZIP
+INTEGRATION_TEST_FILE=$INTEGRATION_TEST_FILE
+WORDFENCE_PROBE_FILE=$WORDFENCE_PROBE_FILE
+OWNERSHIP_MIGRATION_TEST_FILE=$OWNERSHIP_MIGRATION_TEST_FILE
+MANUAL_REMOVAL_OWNERSHIP_TEST_FILE=$MANUAL_REMOVAL_OWNERSHIP_TEST_FILE
 CLOUDFLARE_TEST_JSON=$SECRET_JSON
 CLOUDFLARE_TEST_SCRIPT=$PHP_TEST
 EOF
+
+cat "$SESSION_ENV" >> "$RUNTIME_ENV"
 
 chmod 0600 "$RUNTIME_ENV"
 

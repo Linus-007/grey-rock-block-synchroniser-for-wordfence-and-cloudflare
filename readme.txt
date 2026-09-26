@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.7
+Stable tag: 1.3.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -464,6 +464,14 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.8 =
+* Fixed synchronization of permanent manual Wordfence IP blocks and added ownership tracking for Wordfence, manual and shared-network block sources.
+* Removed Cloudflare blocks when the corresponding Wordfence block is removed, while preserving blocks still required by another legitimate owner.
+* Fixed Sync Now, Run Cleanup Now and Run Reconciliation Now buttons being incorrectly disabled when WP-Cron scheduling is selected.
+* Added persistent Last Sync Status and Last Sync Error reporting so scheduled WP-Cron failures remain visible after the cron request completes.
+* Preserved DDNS trusted-address removal and expanded regression, integration and live Cloudflare coverage for ownership and removal behavior.
+* Updated the security workflow to upgrade Semgrep before scanning and include untracked source files in pre-release SAST coverage.
 
 = 1.3.7 =
 * Fixed multisite attribution for active Wordfence automatic and rate-limit blocks.

@@ -2,7 +2,7 @@ name: greyrock-plugin-test
 
 services:
   db:
-    image: mariadb:11.8
+    image: ${MARIADB_IMAGE:?MARIADB_IMAGE is required}
     container_name: greyrock-plugin-test-db
     restart: "no"
     environment:
@@ -26,7 +26,7 @@ services:
       - test-network
 
   wordpress:
-    image: wordpress:7.1-php8.3-apache
+    image: ${WORDPRESS_IMAGE:?WORDPRESS_IMAGE is required}
     container_name: greyrock-plugin-test-wordpress
     restart: "no"
     depends_on:
@@ -53,7 +53,7 @@ services:
       - test-network
 
   cli:
-    image: wordpress:cli-2.12.0-php8.3
+    image: ${WPCLI_IMAGE:?WPCLI_IMAGE is required}
     container_name: greyrock-plugin-test-cli
     user: "33:33"
     entrypoint:
@@ -72,6 +72,22 @@ services:
       - type: bind
         source: "${PLUGIN_ZIP:?PLUGIN_ZIP is required}"
         target: /artifacts/greyrock-plugin.zip
+        read_only: true
+      - type: bind
+        source: "${INTEGRATION_TEST_FILE:?INTEGRATION_TEST_FILE is required}"
+        target: /artifacts/admin-action-button-test.php
+        read_only: true
+      - type: bind
+        source: "${WORDFENCE_PROBE_FILE:?WORDFENCE_PROBE_FILE is required}"
+        target: /artifacts/wordfence-block-api-probe.php
+        read_only: true
+      - type: bind
+        source: "${OWNERSHIP_MIGRATION_TEST_FILE:?OWNERSHIP_MIGRATION_TEST_FILE is required}"
+        target: /artifacts/ownership-migration-test.php
+        read_only: true
+      - type: bind
+        source: "${MANUAL_REMOVAL_OWNERSHIP_TEST_FILE:?MANUAL_REMOVAL_OWNERSHIP_TEST_FILE is required}"
+        target: /artifacts/manual-removal-ownership-test.php
         read_only: true
     networks:
       - test-network

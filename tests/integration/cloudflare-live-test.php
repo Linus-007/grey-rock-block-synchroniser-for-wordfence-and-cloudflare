@@ -4,6 +4,8 @@
 use WPCF\FirewallSync\Cloudflare\Client;
 use WPCF\FirewallSync\Services\IpValidator;
 use WPCF\FirewallSync\Services\BlockLogger;
+use WPCF\FirewallSync\Services\BlockOwnership;
+use WPCF\FirewallSync\Services\ResetWatermarkStore;
 use WPCF\FirewallSync\Services\SyncScheduler;
 
 const EXPECTED_LIST_ID = '7811817676fa4bac90479557ab74ba93';
@@ -153,79 +155,446 @@ try {
 	 */
 	$safeToRemove = true;
 
-	$comment = sprintf(
-		'Greyrock live integration test %s',
-		gmdate('Ymd\THis\Z')
-	);
+  /*
+   * Reproduce the reported Wordfence workflow using Wordfence's current API:
+   *
+   * permanent manual Wordfence block
+   * -> Grey Rock synchronization
+   * -> Cloudflare list entry
+   * -> Wordfence unblock
+   * -> Grey Rock synchronization
+   * -> Cloudflare list entry removed
+   */
+  if (!class_exists('wfBlock')) {
+    throw new RuntimeException(
+      'Wordfence wfBlock API is unavailable.'
+    );
+  }
 
-	$added = false;
-	$lastAddError = '';
+  update_option(
+    'firewall_sync_options',
+    [
+      'cloudflare_api_token' => $token,
+      'cloudflare_mode' => 'account_list',
+      'cloudflare_account_id' => $accountId,
+      'cloudflare_list_id' => $listId,
+      'cloudflare_list_name' => $listName,
+      'ddns_allow_enabled' => '0',
+      'historical_lookback_hours' => '24',
+      'historical_minimum_events' => '100',
+    ],
+    false
+  );
 
-	for ($attempt = 1; $attempt <= 20; $attempt++) {
-		try {
-			if (contains_ip($token, $accountId, $listId, $testIp)) {
-				$added = true;
-				break;
-			}
-		} catch (Throwable $error) {
-			$lastAddError = $error->getMessage();
-		}
+  wfBlock::unblockIP($testIp, false);
 
-		$client = create_client($token);
+  if (wfBlock::findIPBlock($testIp)) {
+    throw new RuntimeException(
+      'The test IP remained blocked after initial Wordfence cleanup.'
+    );
+  }
 
-		if (
-			$client->add_ip_to_account_list(
-				$accountId,
-				$listId,
-				$testIp,
-				$comment
-			)
-		) {
-			$added = true;
-			break;
-		}
+  wfBlock::createIP(
+    'Grey Rock live Wordfence manual-block integration test',
+    $testIp,
+    wfBlock::DURATION_FOREVER,
+    time(),
+    time(),
+    0,
+    wfBlock::TYPE_IP_MANUAL
+  );
 
-		$lastAddError = $client->get_last_error_message();
+  $wordfenceBlock = wfBlock::findIPBlock($testIp);
 
-		if ($attempt < 20) {
-			sleep(3);
-		}
-	}
+  if (!$wordfenceBlock) {
+    throw new RuntimeException(
+      'Wordfence did not create the permanent manual test block.'
+    );
+  }
 
-	if (!$added) {
-		throw new RuntimeException(
-			$lastAddError !== ''
-				? $lastAddError
-				: 'The plugin could not submit the test list item.'
-		);
-	}
+  if ((int) $wordfenceBlock->type !== wfBlock::TYPE_IP_MANUAL) {
+    throw new RuntimeException(
+      'Wordfence created the test block with an unexpected type.'
+    );
+  }
 
-	echo "PASS: Plugin submitted 8.8.8.8 to Cloudflare.\n";
+  if (
+    (int) $wordfenceBlock->expiration
+    !== wfBlock::DURATION_FOREVER
+  ) {
+    throw new RuntimeException(
+      'Wordfence created the test block with an unexpected expiration.'
+    );
+  }
 
-	for ($attempt = 1; $attempt <= 30; $attempt++) {
-		try {
-			if (contains_ip($token, $accountId, $listId, $testIp)) {
-				$addVerified = true;
-				break;
-			}
-		} catch (Throwable $error) {
-			$lastAddError = $error->getMessage();
-		}
+  echo "PASS: Wordfence created the permanent manual block.\n";
 
-		if ($attempt < 30) {
-			sleep(2);
-		}
-	}
+  if (!SyncScheduler::run_now()) {
+    $error = SyncScheduler::get_last_error_message();
 
-	if (!$addVerified) {
-		throw new RuntimeException(
-			$lastAddError !== ''
-				? $lastAddError
-				: 'Cloudflare did not expose the added item in time.'
-		);
-	}
+    throw new RuntimeException(
+      $error !== ''
+        ? $error
+        : 'Grey Rock failed to synchronize the Wordfence manual block.'
+    );
+  }
 
-	echo "PASS: Fresh plugin client verified 8.8.8.8 in the list.\n";
+  if (
+    !BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_WORDFENCE
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock did not record Wordfence ownership.'
+    );
+  }
+
+  if (!BlockLogger::has_synced($testIp)) {
+    throw new RuntimeException(
+      'Grey Rock did not record synchronization provenance.'
+    );
+  }
+
+  $lastAddError = '';
+
+  for ($attempt = 1; $attempt <= 30; $attempt++) {
+    try {
+      if (
+        contains_ip(
+          $token,
+          $accountId,
+          $listId,
+          $testIp
+        )
+      ) {
+        $addVerified = true;
+        break;
+      }
+    } catch (Throwable $error) {
+      $lastAddError = $error->getMessage();
+    }
+
+    if ($attempt < 30) {
+      sleep(2);
+    }
+  }
+
+  if (!$addVerified) {
+    throw new RuntimeException(
+      $lastAddError !== ''
+        ? $lastAddError
+        : 'Cloudflare did not expose the synchronized Wordfence block in time.'
+    );
+  }
+
+  echo "PASS: Grey Rock synchronized the Wordfence manual block to Cloudflare.\n";
+  echo "PASS: Grey Rock recorded Wordfence ownership and synchronization provenance.\n";
+
+  wfBlock::unblockIP($testIp, false);
+
+  if (wfBlock::findIPBlock($testIp)) {
+    throw new RuntimeException(
+      'Wordfence retained the test block after unblockIP().'
+    );
+  }
+
+  echo "PASS: Wordfence removed the manual block.\n";
+
+  if (!SyncScheduler::run_now()) {
+    $error = SyncScheduler::get_last_error_message();
+
+    throw new RuntimeException(
+      $error !== ''
+        ? $error
+        : 'Grey Rock failed to reconcile the removed Wordfence block.'
+    );
+  }
+
+  $lastRemoveError = '';
+
+  for ($attempt = 1; $attempt <= 30; $attempt++) {
+    try {
+      if (
+        !contains_ip(
+          $token,
+          $accountId,
+          $listId,
+          $testIp
+        )
+      ) {
+        $removeVerified = true;
+        break;
+      }
+    } catch (Throwable $error) {
+      $lastRemoveError = $error->getMessage();
+    }
+
+    if ($attempt < 30) {
+      sleep(2);
+    }
+  }
+
+  if (!$removeVerified) {
+    throw new RuntimeException(
+      $lastRemoveError !== ''
+        ? $lastRemoveError
+        : 'Cloudflare retained the IP after the Wordfence block was removed.'
+    );
+  }
+
+  if (
+    BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_WORDFENCE
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock retained stale Wordfence ownership.'
+    );
+  }
+
+  if (BlockLogger::has_synced($testIp)) {
+    throw new RuntimeException(
+      'Grey Rock retained stale synchronization provenance.'
+    );
+  }
+
+  if (ResetWatermarkStore::get($testIp) <= 0) {
+    throw new RuntimeException(
+      'Grey Rock did not record the removal reset watermark.'
+    );
+  }
+
+  echo "PASS: Grey Rock removed the Cloudflare item after the Wordfence block was removed.\n";
+  echo "PASS: Grey Rock cleared Wordfence ownership and synchronization provenance.\n";
+  echo "PASS: Grey Rock recorded the removal reset watermark.\n";
+
+
+  /*
+   * Overlapping-owner safety test:
+   *
+   * The same IP is owned by Grey Rock manual ownership and Wordfence.
+   * Removing only the Wordfence block must not remove the Cloudflare item.
+   */
+  if (!ResetWatermarkStore::clear($testIp)) {
+    throw new RuntimeException(
+      'Grey Rock could not clear the reset watermark before the overlap test.'
+    );
+  }
+
+  if (
+    !BlockOwnership::add(
+      $testIp,
+      BlockOwnership::OWNER_MANUAL
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock could not establish manual ownership for the overlap test.'
+    );
+  }
+
+  if (
+    !BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_MANUAL
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock manual ownership was not present for the overlap test.'
+    );
+  }
+
+  wfBlock::createIP(
+    'Grey Rock overlapping-owner live integration test',
+    $testIp,
+    wfBlock::DURATION_FOREVER,
+    time(),
+    time(),
+    0,
+    wfBlock::TYPE_IP_MANUAL
+  );
+
+  if (!wfBlock::findIPBlock($testIp)) {
+    throw new RuntimeException(
+      'Wordfence did not create the overlap-test manual block.'
+    );
+  }
+
+  if (!SyncScheduler::run_now()) {
+    $error = SyncScheduler::get_last_error_message();
+
+    throw new RuntimeException(
+      $error !== ''
+        ? $error
+        : 'Grey Rock failed while synchronizing the overlap test.'
+    );
+  }
+
+  $overlapAddVerified = false;
+  $lastOverlapAddError = '';
+
+  for ($attempt = 1; $attempt <= 30; $attempt++) {
+    try {
+      if (
+        contains_ip(
+          $token,
+          $accountId,
+          $listId,
+          $testIp
+        )
+      ) {
+        $overlapAddVerified = true;
+        break;
+      }
+    } catch (Throwable $error) {
+      $lastOverlapAddError = $error->getMessage();
+    }
+
+    if ($attempt < 30) {
+      sleep(2);
+    }
+  }
+
+  if (!$overlapAddVerified) {
+    throw new RuntimeException(
+      $lastOverlapAddError !== ''
+        ? $lastOverlapAddError
+        : 'Cloudflare did not expose the overlap-test IP in time.'
+    );
+  }
+
+  if (
+    !BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_MANUAL
+    )
+    || !BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_WORDFENCE
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock did not retain both owners during the overlap test.'
+    );
+  }
+
+  echo "PASS: Overlap test established both manual and Wordfence ownership.\n";
+  echo "PASS: Overlap test synchronized the shared IP to Cloudflare.\n";
+
+  wfBlock::unblockIP($testIp, false);
+
+  if (wfBlock::findIPBlock($testIp)) {
+    throw new RuntimeException(
+      'Wordfence retained the overlap-test block after unblockIP().'
+    );
+  }
+
+  if (!SyncScheduler::run_now()) {
+    $error = SyncScheduler::get_last_error_message();
+
+    throw new RuntimeException(
+      $error !== ''
+        ? $error
+        : 'Grey Rock failed while reconciling the overlap-test Wordfence removal.'
+    );
+  }
+
+  if (
+    BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_WORDFENCE
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock retained Wordfence ownership after the overlap-test unblock.'
+    );
+  }
+
+  if (
+    !BlockOwnership::has(
+      $testIp,
+      BlockOwnership::OWNER_MANUAL
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock incorrectly removed manual ownership during Wordfence reconciliation.'
+    );
+  }
+
+  $overlapPreserved = false;
+  $lastOverlapCheckError = '';
+
+  for ($attempt = 1; $attempt <= 30; $attempt++) {
+    try {
+      if (
+        contains_ip(
+          $token,
+          $accountId,
+          $listId,
+          $testIp
+        )
+      ) {
+        $overlapPreserved = true;
+        break;
+      }
+    } catch (Throwable $error) {
+      $lastOverlapCheckError = $error->getMessage();
+    }
+
+    if ($attempt < 30) {
+      sleep(2);
+    }
+  }
+
+  if (!$overlapPreserved) {
+    throw new RuntimeException(
+      $lastOverlapCheckError !== ''
+        ? $lastOverlapCheckError
+        : 'Grey Rock removed the Cloudflare item even though manual ownership remained.'
+    );
+  }
+
+  echo "PASS: Removing Wordfence ownership preserved the Cloudflare item because manual ownership remained.\n";
+  echo "PASS: Manual ownership remained after Wordfence reconciliation.\n";
+
+  if (
+    !BlockOwnership::remove(
+      $testIp,
+      BlockOwnership::OWNER_MANUAL
+    )
+  ) {
+    throw new RuntimeException(
+      'Grey Rock could not clear manual ownership after the overlap test.'
+    );
+  }
+
+
+  /*
+   * DDNS trusted-address live acceptance test.
+   *
+   * The overlap test intentionally leaves the synchronized IP present in
+   * Cloudflare. Once that address becomes a resolved trusted address,
+   * Grey Rock must automatically remove it from the block destination and
+   * clear the local synchronization record.
+   */
+  if (!contains_ip($token, $accountId, $listId, $testIp)) {
+    throw new RuntimeException(
+      'The DDNS test requires the synchronized IP to remain in Cloudflare.'
+    );
+  }
+
+  if (!BlockLogger::has_synced($testIp)) {
+    throw new RuntimeException(
+      'The DDNS test requires the synchronization record to remain present.'
+    );
+  }
+
+  if (BlockOwnership::has_any($testIp)) {
+    throw new RuntimeException(
+      'The DDNS test must begin without another synchronization owner.'
+    );
+  }
 
   update_option(
     'firewall_sync_options',
@@ -256,17 +625,6 @@ try {
     false
   );
 
-  BlockLogger::log(
-    $testIp,
-    'live test: trusted address awaiting removal'
-  );
-
-  if (!BlockLogger::has_synced($testIp)) {
-    throw new RuntimeException(
-      'The live test could not create the local synchronization record.'
-    );
-  }
-
   if (!SyncScheduler::run_now()) {
     $error = SyncScheduler::get_last_error_message();
 
@@ -278,19 +636,24 @@ try {
   }
 
   $automaticRemovalVerified = false;
+  $lastTrustedRemovalError = '';
 
   for ($attempt = 1; $attempt <= 30; $attempt++) {
-    if (
-      !contains_ip(
-        $token,
-        $accountId,
-        $listId,
-        $testIp
-      )
-    ) {
-      $automaticRemovalVerified = true;
-      $removeVerified = true;
-      break;
+    try {
+      if (
+        !contains_ip(
+          $token,
+          $accountId,
+          $listId,
+          $testIp
+        )
+      ) {
+        $automaticRemovalVerified = true;
+        $removeVerified = true;
+        break;
+      }
+    } catch (Throwable $error) {
+      $lastTrustedRemovalError = $error->getMessage();
     }
 
     if ($attempt < 30) {
@@ -300,7 +663,9 @@ try {
 
   if (!$automaticRemovalVerified) {
     throw new RuntimeException(
-      'Grey Rock did not automatically remove 8.8.8.8 from the Cloudflare block list.'
+      $lastTrustedRemovalError !== ''
+        ? $lastTrustedRemovalError
+        : 'Grey Rock did not automatically remove 8.8.8.8 from the Cloudflare block list.'
     );
   }
 
@@ -311,7 +676,6 @@ try {
   }
 
   echo "PASS: Grey Rock automatically removed 8.8.8.8 after it became a trusted address.\n";
-
 } catch (Throwable $error) {
 	$primaryError = $error->getMessage();
 } finally {

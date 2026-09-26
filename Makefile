@@ -35,6 +35,11 @@ validate:
 	@$(PHP) tests/static/reset-watermark-capacity-regression.php
 	@$(PHP) tests/static/multisite-shared-ip-attribution-regression.php
 	@$(PHP) tests/static/cleanup-reset-regression.php
+	@$(PHP) tests/static/block-ownership-regression.php
+	@$(PHP) tests/static/network-manual-ownership-regression.php
+	@$(PHP) tests/static/block-ownership-resolver-regression.php
+	@$(PHP) tests/static/network-stale-managed-regression.php
+	@$(PHP) tests/static/network-reconcile-ownership-regression.php
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^ \* Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare$$' "$(PLUGIN_ENTRY)"
@@ -108,8 +113,13 @@ clean:
 	@echo "Removed generated release files."
 
 pot:
-	@wp i18n make-pot \
+	@echo "Generating translation template with containerized WP-CLI..."
+	@sudo docker run --rm \
+		--user "$$(id -u):$$(id -g)" \
+		-v "$$(pwd):/workspace" \
+		-w /workspace \
+		wordpress:cli-php8.5 \
+		i18n make-pot \
 		src \
 		src/languages/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.pot \
-		--domain=grey-rock-block-synchroniser-for-wordfence-and-cloudflare \
-		--allow-root
+		--domain=grey-rock-block-synchroniser-for-wordfence-and-cloudflare

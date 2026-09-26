@@ -144,6 +144,12 @@ final class NetworkSynchronizer {
     $cf_set = array_fill_keys($inventory, true);
     $missing = [];
     $log_set = [];
+    $ownership_set = array_fill_keys(
+      self::normalize_logged_ips(
+        NetworkManualOwnershipStore::get_ips()
+      ),
+      true
+    );
 
     foreach ($site_ids as $blog_id) {
       switch_to_blog((int) $blog_id);
@@ -158,15 +164,112 @@ final class NetworkSynchronizer {
             $missing[$ip] = true;
           }
         }
+
+        foreach ([
+          BlockOwnership::OWNER_MANUAL,
+          BlockOwnership::OWNER_WORDFENCE,
+        ] as $owner) {
+          foreach (self::normalize_logged_ips(
+            BlockOwnership::get_ips_for_owner($owner)
+          ) as $ip) {
+            $ownership_set[$ip] = true;
+          }
+        }
       } finally {
         restore_current_blog();
       }
     }
 
+    /*
+     * These are Grey Rock-managed addresses for which no current owner
+     * remains anywhere on the shared Network Admin destination.
+     *
+     * Deletion is deliberately handled separately from inventory discovery so
+     * no Cloudflare change can occur until every inheriting site has completed
+     * its evidence evaluation.
+     */
+    $stale_managed = array_diff_key(
+      $log_set,
+      $ownership_set
+    );
+
+    $removed_from_cf = [];
     $purged = [];
     $cleanup_error = '';
 
-    if (!empty(
+    /*
+     * Remove Grey Rock-managed shared blocks only after every inheriting site
+     * has completed synchronization and the combined ownership set proves that
+     * no legitimate owner remains.
+     */
+    foreach (array_keys($stale_managed) as $ip) {
+      if (
+        !$client->remove_ip_from_account_list(
+          $account_id,
+          $list_id,
+          $ip
+        )
+      ) {
+        $client_error = $client->get_last_error_message();
+
+        $cleanup_error = $client_error !== ''
+          ? $client_error
+          : sprintf(
+            /* translators: %s: IP address. */
+            __(
+              'Stale shared Wordfence block %s could not be removed from Cloudflare.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            $ip
+          );
+
+        break;
+      }
+
+      if (!ResetWatermarkStore::set($ip, time())) {
+        $cleanup_error = __(
+          'Shared Wordfence cleanup stopped because the network reset-watermark store is at safe capacity. No required watermark was evicted.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+
+        break;
+      }
+
+      foreach ($site_ids as $blog_id) {
+        switch_to_blog((int) $blog_id);
+
+        try {
+          if (!BlockLogger::remove($ip)) {
+            $cleanup_error = sprintf(
+              /* translators: %s: IP address. */
+              __(
+                'Cloudflare removed stale shared Wordfence block %s, but a site synchronization record could not be removed safely.',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              ),
+              $ip
+            );
+
+            break;
+          }
+        } finally {
+          restore_current_blog();
+        }
+      }
+
+      if ($cleanup_error !== '') {
+        break;
+      }
+
+      $removed_from_cf[] = $ip;
+
+      /*
+       * This stale managed record has now been handled explicitly. Do not also
+       * report it through the optional "missing in Cloudflare" local purge.
+       */
+      unset($missing[$ip]);
+    }
+
+    if ($cleanup_error === '' && !empty(
       $options['purge_local_records_missing_in_cloudflare']
     )) {
       foreach (array_keys($missing) as $ip) {
@@ -219,6 +322,7 @@ final class NetworkSynchronizer {
       'orphaned_in_cf' => array_values(
         array_diff($inventory, array_keys($log_set))
       ),
+      'removed_from_cf' => $removed_from_cf,
       'purged' => $purged,
       'error' => $cleanup_error,
     ];

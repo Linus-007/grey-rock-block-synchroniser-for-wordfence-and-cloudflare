@@ -26,14 +26,21 @@ function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_sit
   global $wpdb;
 
   $table = $wpdb->prefix . 'wpcf_sync_blocks';
+  $ownership_table = $wpdb->prefix . 'wpcf_sync_ownership';
 
   $wpdb->query(
     "DROP TABLE IF EXISTS `{$table}`"
   );
 
+  $wpdb->query(
+    "DROP TABLE IF EXISTS `{$ownership_table}`"
+  );
+
   delete_option('firewall_sync_options');
   delete_option('firewall_sync_last_run');
   delete_option('firewall_sync_last_attempt_timestamp');
+  delete_option('firewall_sync_last_result');
+  delete_option('firewall_sync_last_error');
   delete_option('firewall_sync_is_running');
   delete_option('firewall_sync_version');
   delete_option('firewall_sync_ddns_state');
@@ -60,6 +67,7 @@ if (is_multisite()) {
   delete_site_option('firewall_sync_network_version');
   delete_site_option('firewall_sync_network_ddns_state');
   delete_site_option('firewall_sync_network_reset_watermarks');
+  delete_site_option('firewall_sync_network_manual_ownership');
 } else {
   grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
 }

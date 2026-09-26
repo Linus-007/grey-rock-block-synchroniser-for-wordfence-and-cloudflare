@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Grey Rock Block Synchroniser for Wordfence and Cloudflare 1.3.7\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/grey-rock-block-synchroniser-for-wordfence-and-cloudflare\n"
+"Project-Id-Version: Grey Rock Block Synchroniser for Wordfence and Cloudflare 1.3.8\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/src\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-18T20:40:09+00:00\n"
+"POT-Creation-Date: 2026-09-26T17:56:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare\n"
@@ -39,398 +39,486 @@ msgstr ""
 msgid "https://greyscale.zone/"
 msgstr ""
 
-#: includes/Admin/Fields.php:71
+#: includes/Admin/Fields.php:74
 msgid "Network Cloudflare Configuration"
 msgstr ""
 
-#: includes/Admin/Fields.php:72
+#: includes/Admin/Fields.php:75
 msgid "Cloudflare Configuration"
 msgstr ""
 
-#: includes/Admin/Fields.php:87
+#: includes/Admin/Fields.php:90
 msgid "Cloudflare API Token"
 msgstr ""
 
-#: includes/Admin/Fields.php:88
+#: includes/Admin/Fields.php:91
 msgid "Paste the restricted API token created for this plugin."
 msgstr ""
 
-#: includes/Admin/Fields.php:93
+#: includes/Admin/Fields.php:96
 msgid "Cloudflare Account ID"
 msgstr ""
 
-#: includes/Admin/Fields.php:94
+#: includes/Admin/Fields.php:97
 msgid "Required for Account IP List mode"
 msgstr ""
 
-#: includes/Admin/Fields.php:99
+#: includes/Admin/Fields.php:102
 msgid "Cloudflare List Name"
 msgstr ""
 
-#: includes/Admin/Fields.php:100
+#: includes/Admin/Fields.php:103
 msgid "Recommended: wordfence_hot_blocklist"
 msgstr ""
 
-#: includes/Admin/Fields.php:105
+#: includes/Admin/Fields.php:108
 msgid "Cloudflare Zone ID"
 msgstr ""
 
-#: includes/Admin/Fields.php:106
+#: includes/Admin/Fields.php:109
 msgid "Required for Zone Access Rules mode"
 msgstr ""
 
-#: includes/Admin/Fields.php:121
+#: includes/Admin/Fields.php:125
 msgid "Site-specific settings"
 msgstr ""
 
-#: includes/Admin/Fields.php:130
+#: includes/Admin/Fields.php:134
 msgid "Allow individual sites to use their own Cloudflare configuration."
 msgstr ""
 
-#: includes/Admin/Fields.php:144
+#: includes/Admin/Fields.php:148
 msgid "Configuration source"
 msgstr ""
 
-#: includes/Admin/Fields.php:153
+#: includes/Admin/Fields.php:157
 msgid "Network Admin requires this site to use the network configuration."
 msgstr ""
 
-#: includes/Admin/Fields.php:165
+#: includes/Admin/Fields.php:169
 msgid "Use the Network Admin configuration"
 msgstr ""
 
-#: includes/Admin/Fields.php:174
+#: includes/Admin/Fields.php:178
 msgid "Use a site-specific configuration"
 msgstr ""
 
-#: includes/Admin/Fields.php:181
+#: includes/Admin/Fields.php:185
 msgid "Save after changing the source. Site-specific fields become editable when this site uses its own configuration."
 msgstr ""
 
-#: includes/Admin/Fields.php:195
+#: includes/Admin/Fields.php:199
 msgid "Cloudflare Mode"
 msgstr ""
 
-#: includes/Admin/Fields.php:208
+#: includes/Admin/Fields.php:212
 msgid "Zone Access Rules"
 msgstr ""
 
-#: includes/Admin/Fields.php:210
+#: includes/Admin/Fields.php:214
 msgid "Account IP List"
 msgstr ""
 
-#: includes/Admin/Fields.php:214
+#: includes/Admin/Fields.php:218
 msgid "Zone Access Rules applies blocks to one zone. Account IP List stores addresses in a shared Cloudflare account list."
 msgstr ""
 
-#: includes/Admin/Fields.php:249
+#: includes/Admin/Fields.php:253
 msgid "Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Filter Lists: Edit. DNS editing permission is not required."
 msgstr ""
 
-#: includes/Admin/Fields.php:253
+#: includes/Admin/Fields.php:257
 msgid "Find this on the Cloudflare zone Overview page. This is an identifier, not the domain name."
 msgstr ""
 
-#: includes/Admin/Fields.php:257
+#: includes/Admin/Fields.php:261
 msgid "Use the Account ID for the Cloudflare account that owns the IP list."
 msgstr ""
 
-#: includes/Admin/Fields.php:261
+#: includes/Admin/Fields.php:265
 msgid "Enter the visible Cloudflare list name without the dollar sign. The plugin finds the hidden internal List ID automatically. Cloudflare Free accounts permit one custom list, so the recommended name is wordfence_hot_blocklist. Use it in a Cloudflare Custom Rule as: ip.src in $wordfence_hot_blocklist."
 msgstr ""
 
-#: includes/Admin/Fields.php:282
+#: includes/Admin/Fields.php:286
 msgid "DDNS domain"
 msgstr ""
 
-#: includes/Admin/Fields.php:302
+#: includes/Admin/Fields.php:306
 msgid "Enter a hostname only, such as admin.example.com. The hostname must resolve directly to the administrator’s public address. If Cloudflare hosts the record, set the dedicated DDNS hostname to DNS only; do not use a proxied hostname. Do not enter a URL, path or port. Grey Rock does not create or update DDNS records and does not need DNS editing permission."
 msgstr ""
 
-#: includes/Admin/Fields.php:309
+#: includes/Admin/Fields.php:313
 msgid "Resolved addresses:"
 msgstr ""
 
-#: includes/Admin/Fields.php:326
+#: includes/Admin/Fields.php:330
 msgid "No successful public-address lookup is stored."
 msgstr ""
 
-#: includes/Admin/Fields.php:343
+#: includes/Admin/Fields.php:347
 msgid "Last successful lookup:"
 msgstr ""
 
-#: includes/Admin/Fields.php:359
+#: includes/Admin/Fields.php:363
 msgid "The latest lookup failed. The last successful addresses remain available for up to 24 hours."
 msgstr ""
 
-#: includes/Admin/Fields.php:375
+#: includes/Admin/Fields.php:379
 msgid "Save settings and resolve now"
 msgstr ""
 
-#: includes/Admin/Fields.php:387
+#: includes/Admin/Fields.php:391
 msgid "Administrator allow list"
 msgstr ""
 
-#: includes/Admin/Fields.php:402
+#: includes/Admin/Fields.php:406
 msgid "Exclude the currently resolved public addresses from future Grey Rock block synchronization."
 msgstr ""
 
-#: includes/Admin/Fields.php:409
+#: includes/Admin/Fields.php:413
 msgid "This creates a local Grey Rock allow-list entry. At the next synchronisation, Grey Rock automatically removes the resolved addresses from its configured Cloudflare block destination and clears the related local synchronisation records. No separate Cloudflare allow rule or list is created."
 msgstr ""
 
-#: includes/Admin/Fields.php:416
+#: includes/Admin/Fields.php:420
 msgid "IPv4 and IPv6 addresses are stored exactly as resolved and are never widened to a network range."
 msgstr ""
 
-#: includes/Admin/Fields.php:430
+#: includes/Admin/Fields.php:434
 msgid "Historical WAF lookback"
 msgstr ""
 
-#: includes/Admin/Fields.php:449
+#: includes/Admin/Fields.php:453
 msgid "1 hour"
 msgstr ""
 
-#: includes/Admin/Fields.php:451
+#: includes/Admin/Fields.php:455
 msgid "3 hours"
 msgstr ""
 
-#: includes/Admin/Fields.php:453
+#: includes/Admin/Fields.php:457
 msgid "6 hours"
 msgstr ""
 
-#: includes/Admin/Fields.php:455
+#: includes/Admin/Fields.php:459
 msgid "12 hours"
 msgstr ""
 
-#: includes/Admin/Fields.php:457
+#: includes/Admin/Fields.php:461
 msgid "24 hours"
 msgstr ""
 
-#: includes/Admin/Fields.php:461
+#: includes/Admin/Fields.php:465
 msgid "Also import Wordfence Live Traffic events recorded as blocked:waf during this period."
 msgstr ""
 
-#: includes/Admin/Fields.php:475
+#: includes/Admin/Fields.php:479
 msgid "Historical block threshold"
 msgstr ""
 
-#: includes/Admin/Fields.php:491
+#: includes/Admin/Fields.php:495
 msgid "Minimum blocked:waf events required from one IP address during the lookback period. Whole numbers from 1 through 100 are accepted."
 msgstr ""
 
-#: includes/Admin/Fields.php:505
+#: includes/Admin/Fields.php:509
+msgid "Cloudflare-authoritative cleanup"
+msgstr ""
+
+#: includes/Admin/Fields.php:523
+msgid "Remove Grey Rock records when absent from Cloudflare"
+msgstr ""
+
+#: includes/Admin/Fields.php:530
+msgid "In Account IP List mode, Grey Rock removes stale local synchronization records only after successful evaluation confirms that their addresses remain absent from the configured Cloudflare list. New qualifying Wordfence attacks can synchronize them again."
+msgstr ""
+
+#: includes/Admin/Fields.php:544
 msgid "Scheduling method"
 msgstr ""
 
-#: includes/Admin/Fields.php:520
+#: includes/Admin/Fields.php:559
 msgid "WordPress WP-Cron"
 msgstr ""
 
-#: includes/Admin/Fields.php:524
+#: includes/Admin/Fields.php:563
 msgid "External scheduler"
 msgstr ""
 
-#: includes/Admin/Fields.php:528
+#: includes/Admin/Fields.php:567
 msgid "Manual synchronization only"
 msgstr ""
 
-#: includes/Admin/Fields.php:550
+#: includes/Admin/Fields.php:589
 msgid "WP-Cron schedules synchronization inside WordPress and may run late on a quiet site. External scheduler disables the plugin synchronization cron and expects the following command to check whether synchronization is due:"
 msgstr ""
 
-#: includes/Admin/Fields.php:561
+#: includes/Admin/Fields.php:600
 msgid "Manual synchronization only disables automatic synchronization. Manual buttons and the --force command remain available. Hourly cleanup maintenance continues in every mode."
 msgstr ""
 
-#: includes/Admin/Fields.php:575
+#: includes/Admin/Fields.php:614
 msgid "Sync Interval"
 msgstr ""
 
-#: includes/Admin/Fields.php:593
+#: includes/Admin/Fields.php:632
 msgid "Every minute"
 msgstr ""
 
-#: includes/Admin/Fields.php:595
+#: includes/Admin/Fields.php:634
 msgid "Every 5 minutes"
 msgstr ""
 
-#: includes/Admin/Fields.php:597
+#: includes/Admin/Fields.php:636
 msgid "Every 15 minutes"
 msgstr ""
 
-#: includes/Admin/Fields.php:599
+#: includes/Admin/Fields.php:638
 msgid "Every hour"
 msgstr ""
 
-#: includes/Admin/Fields.php:603
+#: includes/Admin/Fields.php:642
 msgid "This interval is the synchronization policy. An external scheduler may check every minute; Grey Rock runs only when the selected interval has elapsed. A scheduler that checks less often becomes the limiting interval."
 msgstr ""
 
-#: includes/Admin/Fields.php:653
+#: includes/Admin/Fields.php:692
 msgid "Network firewall settings saved."
 msgstr ""
 
-#: includes/Admin/Fields.php:670
+#: includes/Admin/Fields.php:709
 msgid "Site firewall settings saved."
 msgstr ""
 
-#: includes/Admin/Fields.php:702
+#: includes/Admin/Fields.php:741
 msgid "Cloudflare configuration validated successfully."
 msgstr ""
 
-#: includes/Admin/Fields.php:708
+#: includes/Admin/Fields.php:747
 msgid "Cloudflare configuration validation failed."
 msgstr ""
 
-#: includes/Admin/Fields.php:732
-#: includes/Admin/Fields.php:859
+#: includes/Admin/Fields.php:771
+#: includes/Admin/Fields.php:900
 msgid "Enter a public IPv4 or IPv6 address."
 msgstr ""
 
-#: includes/Admin/Fields.php:757
-#: includes/Admin/Fields.php:917
-#: includes/Admin/Fields.php:1205
+#: includes/Admin/Fields.php:798
+#: includes/Admin/Fields.php:960
+#: includes/Admin/Fields.php:1426
 msgid "The Cloudflare account list could not be resolved."
 msgstr ""
 
-#: includes/Admin/Fields.php:775
+#: includes/Admin/Fields.php:816
 msgid "The test IP address already exists in the Cloudflare account list. It was not modified."
 msgstr ""
 
-#: includes/Admin/Fields.php:809
+#: includes/Admin/Fields.php:850
 msgid "The test block was created and removed successfully."
 msgstr ""
 
-#: includes/Admin/Fields.php:815
+#: includes/Admin/Fields.php:856
 msgid "The test block could not be created or removed."
 msgstr ""
 
-#: includes/Admin/Fields.php:844
+#: includes/Admin/Fields.php:885
 msgid "Manual account-list management is available only in Account IP List mode."
 msgstr ""
 
-#: includes/Admin/Fields.php:871
+#: includes/Admin/Fields.php:914
 msgid "Select a valid list operation."
 msgstr ""
 
-#: includes/Admin/Fields.php:887
+#: includes/Admin/Fields.php:930
 msgid "Enter a reason before adding the IP address."
 msgstr ""
 
-#. translators: 1: IP address, 2: Cloudflare list name.
-#: includes/Admin/Fields.php:938
-#, php-format
-msgid "IP address %1$s already exists in Cloudflare list %2$s."
+#: includes/Admin/Fields.php:987
+msgid "The IP address already exists in Cloudflare, but Grey Rock could not record manual ownership safely."
 msgstr ""
 
 #. translators: 1: IP address, 2: Cloudflare list name.
-#: includes/Admin/Fields.php:958
+#: includes/Admin/Fields.php:999
+#, php-format
+msgid "IP address %1$s already exists in Cloudflare list %2$s and is now recorded as a manual Grey Rock block."
+msgstr ""
+
+#: includes/Admin/Fields.php:1026
+msgid "Cloudflare added the address, but Grey Rock could not record manual ownership safely."
+msgstr ""
+
+#. translators: 1: IP address, 2: Cloudflare list name.
+#: includes/Admin/Fields.php:1035
 #, php-format
 msgid "IP address %1$s was added to Cloudflare list %2$s."
 msgstr ""
 
-#: includes/Admin/Fields.php:966
+#: includes/Admin/Fields.php:1044
 msgid "The IP address could not be added to the Cloudflare list."
 msgstr ""
 
 #. translators: 1: IP address, 2: Cloudflare list name.
-#: includes/Admin/Fields.php:979
+#: includes/Admin/Fields.php:1058
 #, php-format
 msgid "IP address %1$s was removed from Cloudflare list %2$s."
 msgstr ""
 
-#: includes/Admin/Fields.php:987
+#: includes/Admin/Fields.php:1066
 msgid "The IP address could not be removed from the Cloudflare list."
 msgstr ""
 
-#: includes/Admin/Fields.php:1018
+#: includes/Admin/Fields.php:1075
+msgid "Cloudflare removed the address, but Grey Rock could not safely record the local evidence reset."
+msgstr ""
+
+#: includes/Admin/Fields.php:1157
 msgid "No sites currently inherit the Network Admin configuration."
 msgstr ""
 
 #. translators: 1: successful site count, 2: failed sites
-#: includes/Admin/Fields.php:1042
+#: includes/Admin/Fields.php:1181
 #, php-format
 msgid "Network synchronization completed for %1$d site(s). Failures: %2$s"
 msgstr ""
 
+#. translators: 1: number of safe purges, 2: error.
+#: includes/Admin/Fields.php:1200
+#, php-format
+msgid "Network reconciliation stopped after %1$d completed purge(s): %2$s"
+msgstr ""
+
 #. translators: %d: number of synchronized sites
-#: includes/Admin/Fields.php:1057
+#: includes/Admin/Fields.php:1215
 #, php-format
 msgid "Network synchronization completed successfully for %d site(s)."
 msgstr ""
 
-#: includes/Admin/Fields.php:1080
+#: includes/Admin/Fields.php:1238
 msgid "Synchronization completed successfully."
 msgstr ""
 
-#: includes/Admin/Fields.php:1087
-#: includes/Services/NetworkSynchronizer.php:76
+#: includes/Admin/Fields.php:1245
+#: includes/Services/NetworkSynchronizer.php:82
 msgid "Synchronization failed."
 msgstr ""
 
-#: includes/Admin/Fields.php:1104
+#: includes/Admin/Fields.php:1262
 msgid "Cleanup is unavailable while this site inherits a shared Network Admin configuration."
 msgstr ""
 
-#: includes/Admin/Fields.php:1116
-msgid "Cleanup completed."
+#. translators: %d: number of cleaned IP addresses.
+#: includes/Admin/Fields.php:1277
+#, php-format
+msgid "Cleanup completed for %d address(es)."
 msgstr ""
 
-#: includes/Admin/Fields.php:1132
+#. translators: 1: number of completed removals, 2: error.
+#: includes/Admin/Fields.php:1282
+#, php-format
+msgid "Cleanup stopped after %1$d completed removal(s): %2$s"
+msgstr ""
+
+#: includes/Admin/Fields.php:1301
 msgid "Reconciliation is unavailable while this site inherits a shared Network Admin configuration."
 msgstr ""
 
-#: includes/Admin/Fields.php:1179
-#: includes/Cloudflare/Client.php:863
-#: includes/Cloudflare/Client.php:915
+#. translators: 1: completed purge count, 2: error.
+#: includes/Admin/Fields.php:1323
+#, php-format
+msgid "Reconciliation stopped after %1$d completed purge(s): %2$s"
+msgstr ""
+
+#: includes/Admin/Fields.php:1342
+msgid "Reconciliation did not produce a complete result."
+msgstr ""
+
+#: includes/Admin/Fields.php:1398
+#: includes/Cloudflare/Client.php:871
+#: includes/Cloudflare/Client.php:923
 msgid "Invalid or non-public IP address."
 msgstr ""
 
-#: includes/Admin/Fields.php:1231
+#: includes/Admin/Fields.php:1456
+msgid "Cloudflare blocked the address, but Grey Rock could not record manual ownership safely."
+msgstr ""
+
+#: includes/Admin/Fields.php:1467
 msgid "IP address blocked successfully."
 msgstr ""
 
-#: includes/Admin/Fields.php:1239
+#: includes/Admin/Fields.php:1475
 msgid "The IP address could not be blocked."
 msgstr ""
 
-#: includes/Admin/Fields.php:1302
-#: includes/Admin/Settings.php:366
+#: includes/Admin/Fields.php:1538
+#: includes/Admin/Settings.php:723
 msgid "You do not have permission to administer network firewall settings."
 msgstr ""
 
-#: includes/Admin/Fields.php:1313
-#: includes/Admin/Settings.php:375
+#: includes/Admin/Fields.php:1549
+#: includes/Admin/Settings.php:732
 msgid "You do not have permission to administer firewall settings."
 msgstr ""
 
-#: includes/Admin/LogTable.php:24
+#: includes/Admin/LogTable.php:35
 msgid "Synchronisation Record"
 msgstr ""
 
-#: includes/Admin/LogTable.php:25
+#: includes/Admin/LogTable.php:36
 msgid "Synchronisation Records"
 msgstr ""
 
-#: includes/Admin/LogTable.php:75
-#: includes/Admin/Settings.php:269
-#: includes/Admin/Settings.php:1051
+#: includes/Admin/LogTable.php:128
+#: includes/Admin/LogTable.php:161
+#: includes/Admin/Settings.php:430
+#: includes/Admin/Settings.php:511
+#: includes/Admin/Settings.php:1560
 msgid "IP Address"
 msgstr ""
 
-#: includes/Admin/LogTable.php:76
-#: includes/Admin/Settings.php:277
-#: includes/Admin/Settings.php:692
-#: includes/Admin/Settings.php:1061
+#: includes/Admin/LogTable.php:129
+#: includes/Admin/Settings.php:512
+#: includes/Admin/Settings.php:1141
+#: includes/Admin/Settings.php:1570
 msgid "Reason"
 msgstr ""
 
-#: includes/Admin/LogTable.php:77
-msgid "Created At"
+#: includes/Admin/LogTable.php:130
+#: includes/Admin/Settings.php:513
+msgid "Recorded"
 msgstr ""
 
-#: includes/Admin/LogTable.php:86
+#: includes/Admin/LogTable.php:150
+msgid "Filter by IP address"
+msgstr ""
+
+#: includes/Admin/LogTable.php:166
+msgid "Filter by reason"
+msgstr ""
+
+#: includes/Admin/LogTable.php:177
+#: includes/Admin/Settings.php:437
+msgid "Reason contains"
+msgstr ""
+
+#: includes/Admin/LogTable.php:182
+#: includes/Admin/Settings.php:442
+msgid "From"
+msgstr ""
+
+#: includes/Admin/LogTable.php:197
+#: includes/Admin/Settings.php:457
+msgid "To"
+msgstr ""
+
+#: includes/Admin/LogTable.php:212
+#: includes/Admin/Settings.php:472
+msgid "Filter"
+msgstr ""
+
+#: includes/Admin/LogTable.php:224
+#: includes/Admin/Settings.php:484
+msgid "Reset"
+msgstr ""
+
+#: includes/Admin/LogTable.php:240
 msgid "No synchronisation records were found for this site."
 msgstr ""
 
@@ -493,8 +581,8 @@ msgstr ""
 #: includes/Admin/Settings.php:114
 #: includes/Admin/Settings.php:147
 #: includes/Admin/Settings.php:148
-#: includes/Admin/Settings.php:230
-#: includes/Admin/Settings.php:340
+#: includes/Admin/Settings.php:361
+#: includes/Admin/Settings.php:615
 msgid "Synchronisation Log"
 msgstr ""
 
@@ -507,235 +595,269 @@ msgstr ""
 msgid "You do not have permission to view the network synchronisation log."
 msgstr ""
 
-#: includes/Admin/Settings.php:239
+#: includes/Admin/Settings.php:370
 msgid "This page combines the most recent site-specific Grey Rock synchronisation records from across the multisite network."
 msgstr ""
 
-#: includes/Admin/Settings.php:249
+#: includes/Admin/Settings.php:391
+msgid "Filter by site"
+msgstr ""
+
+#: includes/Admin/Settings.php:404
+msgid "All sites"
+msgstr ""
+
+#: includes/Admin/Settings.php:497
 msgid "No synchronisation records were found."
 msgstr ""
 
-#: includes/Admin/Settings.php:261
+#: includes/Admin/Settings.php:510
 msgid "Site"
 msgstr ""
 
-#: includes/Admin/Settings.php:285
-msgid "Recorded"
-msgstr ""
-
-#: includes/Admin/Settings.php:327
+#: includes/Admin/Settings.php:602
 msgid "Synchronisation logs are site-specific. Open Grey Rock Block Synchroniser within an individual site."
 msgstr ""
 
-#: includes/Admin/Settings.php:349
+#: includes/Admin/Settings.php:624
 msgid "This page shows synchronisation records for this site only, including when the site uses the Network Admin configuration."
 msgstr ""
 
-#: includes/Admin/Settings.php:392
+#: includes/Admin/Settings.php:749
 msgid "These settings are the network defaults. Individual sites may inherit them or use site-specific settings when overrides are permitted."
 msgstr ""
 
-#: includes/Admin/Settings.php:402
+#: includes/Admin/Settings.php:759
 msgid "This site inherits its Cloudflare configuration from Network Admin. Synchronization adds Wordfence blocks to the shared destination. Cleanup and reconciliation are unavailable because another site may still require the same Cloudflare entry."
 msgstr ""
 
-#: includes/Admin/Settings.php:419
+#: includes/Admin/Settings.php:779
 msgid "Save Settings"
 msgstr ""
 
-#: includes/Admin/Settings.php:426
+#: includes/Admin/Settings.php:795
 msgid "Cloudflare Tests"
 msgstr ""
 
-#: includes/Admin/Settings.php:434
+#: includes/Admin/Settings.php:804
 msgid "Validate Saved Cloudflare Configuration"
 msgstr ""
 
-#: includes/Admin/Settings.php:449
+#: includes/Admin/Settings.php:823
 msgid "Test IP address"
 msgstr ""
 
-#: includes/Admin/Settings.php:465
+#: includes/Admin/Settings.php:839
 msgid "The plugin will add this address to Cloudflare and immediately attempt to remove it."
 msgstr ""
 
-#: includes/Admin/Settings.php:474
+#: includes/Admin/Settings.php:849
 msgid "Run Test Block"
 msgstr ""
 
-#: includes/Admin/Settings.php:490
+#: includes/Admin/Settings.php:869
 msgid "Network Actions"
 msgstr ""
 
-#: includes/Admin/Settings.php:499
+#: includes/Admin/Settings.php:878
 msgid "Synchronize every site that currently inherits the Network Admin configuration. Sites using independent site-specific settings are not included."
 msgstr ""
 
-#: includes/Admin/Settings.php:526
+#: includes/Admin/Settings.php:906
 msgid "Synchronise Network Now"
 msgstr ""
 
-#: includes/Admin/Settings.php:547
+#: includes/Admin/Settings.php:931
 msgid "Never"
 msgstr ""
 
-#: includes/Admin/Settings.php:552
+#: includes/Admin/Settings.php:936
 msgid "Last Sync Time"
 msgstr ""
 
-#: includes/Admin/Settings.php:556
-msgid "Site Actions"
-msgstr ""
-
-#: includes/Admin/Settings.php:561
-msgid "Sync Now"
-msgstr ""
-
-#: includes/Admin/Settings.php:569
-msgid "Run Cleanup Now"
-msgstr ""
-
-#: includes/Admin/Settings.php:574
-msgid "Run Reconciliation Now"
-msgstr ""
-
-#: includes/Admin/Settings.php:585
-msgid "Reconciliation Results"
-msgstr ""
-
-#: includes/Admin/Settings.php:590
-msgid "Reconciliation completed with no differences."
-msgstr ""
-
-#: includes/Admin/Settings.php:597
-msgid "Missing in Cloudflare"
-msgstr ""
-
-#: includes/Admin/Settings.php:604
-msgid "Orphaned in Cloudflare"
-msgstr ""
-
-#: includes/Admin/Settings.php:626
-msgid "Manual Account List Management"
-msgstr ""
-
-#: includes/Admin/Settings.php:635
-msgid "Add or remove an IPv4 or IPv6 address from the configured Cloudflare account list. Manually added addresses remain in the list until they are removed."
-msgstr ""
-
-#: includes/Admin/Settings.php:669
-msgid "IP address"
-msgstr ""
-
-#: includes/Admin/Settings.php:713
-msgid "Required when adding an address. The reason is stored with the Cloudflare list item. It is not required when removing an address."
-msgstr ""
-
-#: includes/Admin/Settings.php:728
-msgid "Add IP Address"
-msgstr ""
-
-#: includes/Admin/Settings.php:742
-msgid "Remove IP Address"
-msgstr ""
-
-#: includes/Admin/Settings.php:767
-msgid "Cloudflare Setup Guide"
-msgstr ""
-
-#: includes/Admin/Settings.php:776
-msgid "Account IP List mode is recommended for new installations and multisite networks. An Account IP List does not block traffic by itself, so the Custom Rule step is required. Complete every step before relying on synchronisation."
-msgstr ""
-
-#: includes/Admin/Settings.php:787
-msgid "Create the Cloudflare IP list."
-msgstr ""
-
-#: includes/Admin/Settings.php:802
-msgid "Create an IP list named wordfence_hot_blocklist. Use lowercase letters, numbers and underscores. Enter the list name in Grey Rock without a dollar sign."
-msgstr ""
-
-#: includes/Admin/Settings.php:813
-msgid "Create a restricted Cloudflare API token."
-msgstr ""
-
-#: includes/Admin/Settings.php:822
-msgid "Create a custom API token with Account → Account Filter Lists → Edit. Restrict the token to the account that owns the list. DNS editing permission and a Global API Key are not required."
-msgstr ""
-
-#: includes/Admin/Settings.php:833
-msgid "Copy the Cloudflare Account ID."
-msgstr ""
-
-#: includes/Admin/Settings.php:842
-msgid "Open the Cloudflare account or zone Overview page and copy the Account ID shown in the API section."
-msgstr ""
-
-#: includes/Admin/Settings.php:853
-msgid "Configure Grey Rock."
-msgstr ""
-
-#: includes/Admin/Settings.php:862
-msgid "Select Account IP List. Enter the API token, Account ID and List Name. Select the scheduling method, interval, historical lookback and event threshold, and then save the settings."
-msgstr ""
-
-#: includes/Admin/Settings.php:873
-msgid "Create the Cloudflare blocking rule."
-msgstr ""
-
-#: includes/Admin/Settings.php:888
-msgid "Create the rule in every Cloudflare zone that should use the list. Choose Block as the action and deploy the rule."
-msgstr ""
-
-#: includes/Admin/Settings.php:901
-msgid "The dollar sign is required in the Cloudflare rule expression but must not be entered in the Grey Rock List Name field."
-msgstr ""
-
-#: includes/Admin/Settings.php:912
-msgid "Validate and test the configuration."
-msgstr ""
-
-#: includes/Admin/Settings.php:921
-msgid "Select Validate Saved Cloudflare Configuration. Run Test Block with a safe public IP address that is not your current public address and is not already intentionally blocked."
-msgstr ""
-
-#: includes/Admin/Settings.php:932
-msgid "Run synchronisation and review the log."
-msgstr ""
-
-#: includes/Admin/Settings.php:941
-msgid "Select Sync Now or Synchronise Network Now. Site Admin shows only the current site records. Network Admin combines records from every site."
+#: includes/Admin/Settings.php:946
+msgid "Last Sync Status"
 msgstr ""
 
 #: includes/Admin/Settings.php:952
-msgid "Zone Access Rules alternative"
+#: includes/Cloudflare/Client.php:546
+#: includes/Cloudflare/Client.php:1582
+#: includes/Services/SyncScheduler.php:623
+msgid "Unknown"
 msgstr ""
 
-#: includes/Admin/Settings.php:961
-msgid "For one Cloudflare zone, Zone Access Rules mode uses Zone → Firewall Services → Edit and Zone → Zone → Read. Enter the API token and Zone ID. This mode does not use an account list or a Custom Rule."
+#: includes/Admin/Settings.php:958
+msgid "Last Sync Error"
 msgstr ""
 
-#: includes/Admin/Settings.php:975
-msgid "Cloudflare list instructions"
+#: includes/Admin/Settings.php:963
+msgid "Site Actions"
 msgstr ""
 
-#: includes/Admin/Settings.php:988
-msgid "Cloudflare API token instructions"
+#: includes/Admin/Settings.php:968
+msgid "Sync Now"
 msgstr ""
 
-#: includes/Admin/Settings.php:1001
-msgid "Cloudflare Custom Rule instructions"
+#: includes/Admin/Settings.php:976
+msgid "Run Cleanup Now"
+msgstr ""
+
+#: includes/Admin/Settings.php:981
+msgid "Run Reconciliation Now"
+msgstr ""
+
+#: includes/Admin/Settings.php:992
+msgid "Reconciliation Results"
+msgstr ""
+
+#: includes/Admin/Settings.php:1000
+#: includes/Services/SyncScheduler.php:915
+msgid "Reconciliation failed."
+msgstr ""
+
+#. translators: %d: number of records purged before an error.
+#: includes/Admin/Settings.php:1012
+#, php-format
+msgid "Incomplete cleanup: %d local record(s) were safely purged before cleanup stopped."
 msgstr ""
 
 #: includes/Admin/Settings.php:1030
+msgid "Reconciliation completed with no differences."
+msgstr ""
+
+#: includes/Admin/Settings.php:1037
+msgid "Missing in Cloudflare"
+msgstr ""
+
+#: includes/Admin/Settings.php:1044
+msgid "Orphaned in Cloudflare"
+msgstr ""
+
+#: includes/Admin/Settings.php:1052
+msgid "Purged local records"
+msgstr ""
+
+#: includes/Admin/Settings.php:1075
+msgid "Manual Account List Management"
+msgstr ""
+
+#: includes/Admin/Settings.php:1084
+msgid "Add or remove an IPv4 or IPv6 address from the configured Cloudflare account list. Manually added addresses remain in the list until they are removed."
+msgstr ""
+
+#: includes/Admin/Settings.php:1118
+msgid "IP address"
+msgstr ""
+
+#: includes/Admin/Settings.php:1162
+msgid "Required when adding an address. The reason is stored with the Cloudflare list item. It is not required when removing an address."
+msgstr ""
+
+#: includes/Admin/Settings.php:1177
+msgid "Add IP Address"
+msgstr ""
+
+#: includes/Admin/Settings.php:1191
+msgid "Remove IP Address"
+msgstr ""
+
+#: includes/Admin/Settings.php:1221
+msgid "Cloudflare Setup Guide"
+msgstr ""
+
+#: includes/Admin/Settings.php:1230
+msgid "Account IP List mode is recommended for new installations and multisite networks. An Account IP List does not block traffic by itself, so the Custom Rule step is required. Complete every step before relying on synchronisation."
+msgstr ""
+
+#: includes/Admin/Settings.php:1241
+msgid "Create the Cloudflare IP list."
+msgstr ""
+
+#: includes/Admin/Settings.php:1256
+msgid "Create an IP list named wordfence_hot_blocklist. Use lowercase letters, numbers and underscores. Enter the list name in Grey Rock without a dollar sign."
+msgstr ""
+
+#: includes/Admin/Settings.php:1267
+msgid "Create a restricted Cloudflare API token."
+msgstr ""
+
+#: includes/Admin/Settings.php:1276
+msgid "Create a custom API token with Account → Account Filter Lists → Edit. Restrict the token to the account that owns the list. DNS editing permission and a Global API Key are not required."
+msgstr ""
+
+#: includes/Admin/Settings.php:1287
+msgid "Copy the Cloudflare Account ID."
+msgstr ""
+
+#: includes/Admin/Settings.php:1296
+msgid "Open the Cloudflare account or zone Overview page and copy the Account ID shown in the API section."
+msgstr ""
+
+#: includes/Admin/Settings.php:1307
+msgid "Configure Grey Rock."
+msgstr ""
+
+#: includes/Admin/Settings.php:1316
+msgid "Select Account IP List. Enter the API token, Account ID and List Name. Select the scheduling method, interval, historical lookback and event threshold, and then save the settings."
+msgstr ""
+
+#: includes/Admin/Settings.php:1327
+msgid "Create the Cloudflare blocking rule."
+msgstr ""
+
+#: includes/Admin/Settings.php:1342
+msgid "Create the rule in every Cloudflare zone that should use the list. Choose Block as the action and deploy the rule."
+msgstr ""
+
+#: includes/Admin/Settings.php:1355
+msgid "The dollar sign is required in the Cloudflare rule expression but must not be entered in the Grey Rock List Name field."
+msgstr ""
+
+#: includes/Admin/Settings.php:1366
+msgid "Validate and test the configuration."
+msgstr ""
+
+#: includes/Admin/Settings.php:1375
+msgid "Select Validate Saved Cloudflare Configuration. Run Test Block with a safe public IP address that is not your current public address and is not already intentionally blocked."
+msgstr ""
+
+#: includes/Admin/Settings.php:1386
+msgid "Run synchronisation and review the log."
+msgstr ""
+
+#: includes/Admin/Settings.php:1395
+msgid "Select Sync Now or Synchronise Network Now. Site Admin shows only the current site records. Network Admin combines records from every site."
+msgstr ""
+
+#: includes/Admin/Settings.php:1406
+msgid "Zone Access Rules alternative"
+msgstr ""
+
+#: includes/Admin/Settings.php:1415
+msgid "For one Cloudflare zone, Zone Access Rules mode uses Zone → Firewall Services → Edit and Zone → Zone → Read. Enter the API token and Zone ID. This mode does not use an account list or a Custom Rule."
+msgstr ""
+
+#: includes/Admin/Settings.php:1429
+msgid "Cloudflare list instructions"
+msgstr ""
+
+#: includes/Admin/Settings.php:1442
+msgid "Cloudflare API token instructions"
+msgstr ""
+
+#: includes/Admin/Settings.php:1455
+msgid "Cloudflare Custom Rule instructions"
+msgstr ""
+
+#: includes/Admin/Settings.php:1539
 msgid "Manual blocks are site-specific. Open Grey Rock Block Synchroniser within an individual site."
 msgstr ""
 
-#: includes/Admin/Settings.php:1038
+#: includes/Admin/Settings.php:1547
 msgid "Manually Block an IP Address"
 msgstr ""
 
-#: includes/Admin/Settings.php:1070
+#: includes/Admin/Settings.php:1582
 msgid "Block IP"
 msgstr ""
 
@@ -745,7 +867,7 @@ msgid "Cloudflare API Token is missing or malformed."
 msgstr ""
 
 #: includes/Cloudflare/Client.php:76
-#: includes/Cloudflare/Client.php:1473
+#: includes/Cloudflare/Client.php:1481
 msgid "Cloudflare Zone ID must contain exactly 32 hexadecimal characters."
 msgstr ""
 
@@ -766,7 +888,7 @@ msgid "Cloudflare List Name may contain only lowercase letters, numbers and unde
 msgstr ""
 
 #: includes/Cloudflare/Client.php:285
-#: includes/Cloudflare/Client.php:802
+#: includes/Cloudflare/Client.php:809
 msgid "Cloudflare returned an invalid account-list item."
 msgstr ""
 
@@ -792,87 +914,82 @@ msgstr ""
 msgid "Cloudflare list \"%s\" is not an IP list."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:541
-#: includes/Cloudflare/Client.php:1574
-#: includes/Services/SyncScheduler.php:526
-msgid "Unknown"
-msgstr ""
-
-#: includes/Cloudflare/Client.php:638
+#: includes/Cloudflare/Client.php:645
 msgid "Cloudflare did not expose the newly added list item in time for deletion. Remove it manually or try again."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:870
-#: includes/Cloudflare/Client.php:922
-#: includes/Services/SyncScheduler.php:454
+#: includes/Cloudflare/Client.php:878
+#: includes/Cloudflare/Client.php:930
+#: includes/Services/SyncScheduler.php:491
+#: includes/Services/SyncScheduler.php:1321
 msgid "Cloudflare Zone ID is required."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:880
+#: includes/Cloudflare/Client.php:888
 msgid "Wordfence Sync Block"
 msgstr ""
 
 #. translators: 1: Cloudflare operation, 2: error message
-#: includes/Cloudflare/Client.php:1011
+#: includes/Cloudflare/Client.php:1019
 #, php-format
 msgid "Cloudflare %1$s failed: %2$s"
 msgstr ""
 
 #. translators: %d: HTTP response code
-#: includes/Cloudflare/Client.php:1019
+#: includes/Cloudflare/Client.php:1027
 #, php-format
 msgid " (HTTP %d)"
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1074
+#: includes/Cloudflare/Client.php:1082
 msgid "Cloudflare returned an empty response body."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1087
+#: includes/Cloudflare/Client.php:1095
 msgid "Cloudflare returned an unexpectedly large response."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1107
+#: includes/Cloudflare/Client.php:1115
 msgid "Cloudflare returned invalid JSON."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1120
+#: includes/Cloudflare/Client.php:1128
 msgid "Cloudflare returned a JSON response with an invalid top-level structure."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1136
+#: includes/Cloudflare/Client.php:1144
 msgid "Cloudflare returned a response without a valid success indicator."
 msgstr ""
 
 #. translators: %s: response field name.
-#: includes/Cloudflare/Client.php:1155
+#: includes/Cloudflare/Client.php:1163
 #, php-format
 msgid "Cloudflare returned an invalid %s field."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1200
+#: includes/Cloudflare/Client.php:1208
 msgid "Cloudflare returned an invalid result structure."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1228
+#: includes/Cloudflare/Client.php:1236
 msgid "Cloudflare returned invalid pagination information."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1245
-#: includes/Cloudflare/Client.php:1259
+#: includes/Cloudflare/Client.php:1253
+#: includes/Cloudflare/Client.php:1267
 msgid "Cloudflare returned an invalid page count."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1316
-#: includes/Cloudflare/Client.php:1387
+#: includes/Cloudflare/Client.php:1324
+#: includes/Cloudflare/Client.php:1395
 msgid "Cloudflare returned an unsuccessful response."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1521
+#: includes/Cloudflare/Client.php:1529
 msgid "Cloudflare returned an invalid access-rule item."
 msgstr ""
 
-#: includes/Cloudflare/Client.php:1574
+#: includes/Cloudflare/Client.php:1582
 msgid "Wordfence Sync"
 msgstr ""
 
@@ -884,52 +1001,148 @@ msgstr ""
 msgid "The DDNS domain did not resolve to a public IPv4 or IPv6 address."
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:114
+#. translators: %s: IP address.
+#: includes/Services/NetworkSynchronizer.php:219
+#, php-format
+msgid "Stale shared Wordfence block %s could not be removed from Cloudflare."
+msgstr ""
+
+#: includes/Services/NetworkSynchronizer.php:230
+msgid "Shared Wordfence cleanup stopped because the network reset-watermark store is at safe capacity. No required watermark was evicted."
+msgstr ""
+
+#. translators: %s: IP address.
+#: includes/Services/NetworkSynchronizer.php:245
+#, php-format
+msgid "Cloudflare removed stale shared Wordfence block %s, but a site synchronization record could not be removed safely."
+msgstr ""
+
+#: includes/Services/NetworkSynchronizer.php:290
+msgid "Shared cleanup stopped because the network reset-watermark store is at safe capacity. No required watermark was evicted."
+msgstr ""
+
+#: includes/Services/NetworkSynchronizer.php:298
+msgid "Shared cleanup stopped because a site synchronization record could not be removed safely."
+msgstr ""
+
+#: includes/Services/NetworkSynchronizer.php:355
+msgid "Cloudflare inventory is incomplete."
+msgstr ""
+
+#: includes/Services/Reconciler.php:90
+msgid "Local cleanup stopped because the reset-watermark store is at safe capacity. No required watermark was evicted."
+msgstr ""
+
+#: includes/Services/Reconciler.php:100
+msgid "Local cleanup stopped because a synchronization record could not be removed safely."
+msgstr ""
+
+#: includes/Services/Reconciler.php:123
+msgid "Cloudflare inventory could not be proven complete."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:121
 msgid "Every Minute"
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:122
+#: includes/Services/SyncScheduler.php:129
 msgid "Every 5 Minutes"
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:130
+#: includes/Services/SyncScheduler.php:137
 msgid "Every 15 Minutes"
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:417
+#: includes/Services/SyncScheduler.php:454
 msgid "Synchronization is already running."
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:433
+#: includes/Services/SyncScheduler.php:470
+#: includes/Services/SyncScheduler.php:1310
 msgid "Cloudflare API Token is required."
 msgstr ""
 
-#: includes/Services/SyncScheduler.php:446
+#: includes/Services/SyncScheduler.php:483
+#: includes/Services/SyncScheduler.php:1318
 msgid "Cloudflare Account ID and List Name are required."
 msgstr ""
 
+#: includes/Services/SyncScheduler.php:567
+msgid "Grey Rock requires the current Wordfence release. The required Wordfence interface is unavailable."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:578
+msgid "Wordfence returned an unexpected active-block response."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:599
+msgid "Wordfence returned an unexpected active-block entry."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:662
+msgid "Wordfence active-block attribution evidence could not be read completely."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:735
+msgid "Wordfence historical WAF evidence could not be read completely."
+msgstr ""
+
 #. translators: %d: number of blocked WAF events
-#: includes/Services/SyncScheduler.php:613
+#: includes/Services/SyncScheduler.php:798
 #, php-format
 msgid "Wordfence historical WAF block: %d event"
 msgid_plural "Wordfence historical WAF block: %d events"
 msgstr[0] ""
 msgstr[1] ""
 
+#. translators: %s: IP address.
+#: includes/Services/SyncScheduler.php:819
+#, php-format
+msgid "Grey Rock could not record current Wordfence ownership for %s."
+msgstr ""
+
 #. translators: %d: number of failed IP addresses
-#: includes/Services/SyncScheduler.php:679
+#: includes/Services/SyncScheduler.php:881
 #, php-format
 msgid "%d IP address could not be synchronized."
 msgstr ""
 
+#. translators: %s: IP address.
+#: includes/Services/SyncScheduler.php:1068
+#, php-format
+msgid "Grey Rock could not clear stale Wordfence ownership for %s."
+msgstr ""
+
+#. translators: %s: IP address.
+#: includes/Services/SyncScheduler.php:1127
+#, php-format
+msgid "Stale Wordfence block %s could not be removed from Cloudflare."
+msgstr ""
+
+#. translators: %s: IP address.
+#: includes/Services/SyncScheduler.php:1150
+#, php-format
+msgid "Cloudflare removed stale Wordfence block %s, but Grey Rock could not record the local evidence reset."
+msgstr ""
+
+#. translators: %s: IP address.
+#: includes/Services/SyncScheduler.php:1168
+#, php-format
+msgid "Cloudflare removed stale Wordfence block %s, but Grey Rock could not clear its local synchronization record."
+msgstr ""
+
 #. translators: %s: trusted IP address.
-#: includes/Services/SyncScheduler.php:725
+#: includes/Services/SyncScheduler.php:1215
 #, php-format
 msgid "Trusted address %s could not be removed from the Cloudflare block destination."
 msgstr ""
 
 #. translators: %s: trusted IP address.
-#: includes/Services/SyncScheduler.php:738
+#: includes/Services/SyncScheduler.php:1228
 #, php-format
 msgid "Cloudflare removed trusted address %s, but Grey Rock could not clear its local synchronization record."
+msgstr ""
+
+#: includes/Services/SyncScheduler.php:1297
+msgid "Shared inherited cleanup is unavailable."
 msgstr ""

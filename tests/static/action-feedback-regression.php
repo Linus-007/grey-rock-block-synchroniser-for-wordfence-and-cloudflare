@@ -138,6 +138,35 @@ $require(
 );
 
 /*
+ * HTML Boolean attributes are true by presence, even when their value is an
+ * empty string. An enabled Site Action button must therefore omit the
+ * disabled attribute entirely.
+ */
+$require(
+  !str_contains(
+    $contents['settings'],
+    "['disabled' => \$disabled]"
+  ),
+  'Site Action buttons must not emit an empty disabled Boolean attribute.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    "if (\$disabled !== '') {"
+  ),
+  'Site Action button rendering must add disabled only when requested.'
+);
+
+$require(
+  str_contains(
+    $contents['settings'],
+    "\$attributes['disabled'] = 'disabled';"
+  ),
+  'Site Action button rendering must use an explicit disabled attribute when locked.'
+);
+
+/*
  * Manual Block has its own settings-error collection and message code.
  */
 $require(

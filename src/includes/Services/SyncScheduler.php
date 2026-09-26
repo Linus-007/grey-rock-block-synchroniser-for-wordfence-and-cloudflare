@@ -34,6 +34,12 @@ final class SyncScheduler {
   private const LAST_ATTEMPT_OPTION =
     'firewall_sync_last_attempt_timestamp';
 
+  private const LAST_RESULT_OPTION =
+    'firewall_sync_last_result';
+
+  private const LAST_ERROR_OPTION =
+    'firewall_sync_last_error';
+
   private static string $lastErrorMessage = '';
   private static ?array $lastReconciliationResult = null;
 
@@ -227,10 +233,39 @@ final class SyncScheduler {
     );
 
     try {
-      return self::execute_sync();
+      $success = self::execute_sync();
+      self::persist_last_result($success);
+
+      return $success;
     } finally {
       self::release_lock();
     }
+  }
+
+  public static function get_last_persisted_result(): string {
+    $result = get_option(self::LAST_RESULT_OPTION, '');
+
+    return is_string($result) ? $result : '';
+  }
+
+  public static function get_last_persisted_error(): string {
+    $error = get_option(self::LAST_ERROR_OPTION, '');
+
+    return is_string($error) ? $error : '';
+  }
+
+  private static function persist_last_result(bool $success): void {
+    update_option(
+      self::LAST_RESULT_OPTION,
+      $success ? self::RESULT_SUCCESS : self::RESULT_FAILURE,
+      false
+    );
+
+    update_option(
+      self::LAST_ERROR_OPTION,
+      $success ? '' : self::$lastErrorMessage,
+      false
+    );
   }
 
   public static function is_locked(): bool {
@@ -551,8 +586,13 @@ final class SyncScheduler {
     /*
      * Key the batch by IP so active blocks and historical WAF events cannot
      * create duplicate Cloudflare operations.
+     *
+     * Track attributable Wordfence ownership separately from the Cloudflare
+     * batch. An IP that is already present in Cloudflare may require no API
+     * operation but must still establish current Wordfence ownership.
      */
     $batch_by_ip = [];
+    $wordfence_owned_ips = [];
 
     foreach ($blocks as $block) {
       if (!$block instanceof \wfBlock) {
@@ -586,6 +626,11 @@ final class SyncScheduler {
         );
       }
 
+      /*
+       * First decide whether this block belongs in the current Wordfence
+       * desired state. Cloudflare synchronization suppression is evaluated
+       * only after ownership has been established.
+       */
       if (
         $ip === ''
         || !IpValidator::validate_public_ip($ip)
@@ -595,24 +640,6 @@ final class SyncScheduler {
           && time() > $expiration
         )
         || isset($allowed_ips[$ip])
-        || (
-          $mode === 'account_list'
-            ? (
-              self::should_skip_present_account_list_ip(
-                isset($cloudflare_set[$ip]),
-                BlockLogger::has_synced($ip)
-              )
-              || (
-                $evidence_watermark > 0
-                && !self::active_evidence_is_newer(
-                  $blocked_time,
-                  $evidence_watermark
-                )
-              )
-            )
-            : BlockLogger::has_synced($ip)
-        )
-        || BlockLogger::is_blacklisted($ip)
       ) {
         continue;
       }
@@ -649,6 +676,37 @@ final class SyncScheduler {
           $expiration,
           wp_timezone()
         );
+      }
+
+      if ($record_local) {
+        $wordfence_owned_ips[$ip] = true;
+      }
+
+      /*
+       * Ownership above represents current desired state even when this
+       * synchronization episode requires no Cloudflare API operation.
+       */
+      if (
+        (
+          $mode === 'account_list'
+            ? (
+              self::should_skip_present_account_list_ip(
+                isset($cloudflare_set[$ip]),
+                BlockLogger::has_synced($ip)
+              )
+              || (
+                $evidence_watermark > 0
+                && !self::active_evidence_is_newer(
+                  $blocked_time,
+                  $evidence_watermark
+                )
+              )
+            )
+            : BlockLogger::has_synced($ip)
+        )
+        || BlockLogger::is_blacklisted($ip)
+      ) {
+        continue;
       }
 
       $batch_by_ip[$ip] = [
@@ -692,8 +750,21 @@ final class SyncScheduler {
 
       if (
         $ip === ''
-        || isset($batch_by_ip[$ip])
+        || !IpValidator::validate_public_ip($ip)
         || isset($allowed_ips[$ip])
+      ) {
+        continue;
+      }
+
+      /*
+       * Historical evidence is part of the current Wordfence desired state
+       * even when the address is already synchronized or already represented
+       * by an active-block batch entry.
+       */
+      $wordfence_owned_ips[$ip] = true;
+
+      if (
+        isset($batch_by_ip[$ip])
         || (
           $mode === 'account_list'
             ? self::should_skip_present_account_list_ip(
@@ -734,6 +805,38 @@ final class SyncScheduler {
         ),
         'expires_at' => $expires_at,
       ];
+    }
+
+    foreach (array_keys($wordfence_owned_ips) as $ip) {
+      if (
+        !BlockOwnership::add(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        )
+      ) {
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: IP address. */
+          __(
+            'Grey Rock could not record current Wordfence ownership for %s.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          $ip
+        );
+
+        return false;
+      }
+    }
+
+    if (
+      !self::reconcile_wordfence_ownership(
+        $client,
+        $mode,
+        $account_id,
+        $list_id,
+        $wordfence_owned_ips
+      )
+    ) {
+      return false;
     }
 
     $batch = array_values($batch_by_ip);
@@ -921,6 +1024,159 @@ final class SyncScheduler {
         ResetWatermarkStore::clear($entry['ip']);
       }
     }
+  }
+
+  /**
+   * Reconcile previously recorded Wordfence ownership against the complete
+   * Wordfence desired set from the current successful evidence evaluation.
+   *
+   * Ownership is removed before deciding whether Cloudflare may be changed.
+   * A Cloudflare block is deleted only when no other legitimate owner for the
+   * effective destination remains.
+   *
+   * @param array<string, true> $desired_ips
+   */
+  private static function reconcile_wordfence_ownership(
+    Client $client,
+    string $mode,
+    string $account_id,
+    string $list_id,
+    array $desired_ips
+  ): bool {
+    $previous_ips = BlockOwnership::get_ips_for_owner(
+      BlockOwnership::OWNER_WORDFENCE
+    );
+
+    foreach ($previous_ips as $ip) {
+      $ip = IpValidator::normalize_public_ip((string) $ip);
+
+      if (
+        $ip === null
+        || isset($desired_ips[$ip])
+      ) {
+        continue;
+      }
+
+      if (
+        !BlockOwnership::remove(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        )
+      ) {
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: IP address. */
+          __(
+            'Grey Rock could not clear stale Wordfence ownership for %s.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          (string) $ip
+        );
+
+        return false;
+      }
+
+      /*
+       * An inheriting multisite site must never delete from the shared
+       * Cloudflare destination before every inheriting site has completed its
+       * evidence evaluation.
+       *
+       * Retain the existing BlockLogger row temporarily even after this
+       * site's Wordfence ownership is removed. It is provenance that the
+       * shared Cloudflare entry was Grey Rock-managed. NetworkSynchronizer
+       * evaluates ownership across every inheriting site, removes the shared
+       * Cloudflare entry only when no owner remains, and then clears stale
+       * synchronization rows.
+       */
+      if (
+        is_multisite()
+        && Config::uses_network_options()
+      ) {
+        continue;
+      }
+
+      if (
+        BlockOwnershipResolver::
+          has_other_owner_after_wordfence_removal($ip)
+      ) {
+        continue;
+      }
+
+      $removed = $mode === 'account_list'
+        ? $client->remove_ip_from_account_list(
+          $account_id,
+          $list_id,
+          $ip
+        )
+        : $client->delete_block($ip);
+
+      if (!$removed) {
+        /*
+         * Restore ownership so a later synchronization can retry safely.
+         */
+        BlockOwnership::add(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        );
+
+        $client_error = $client->get_last_error_message();
+
+        self::$lastErrorMessage = $client_error !== ''
+          ? $client_error
+          : sprintf(
+            /* translators: %s: IP address. */
+            __(
+              'Stale Wordfence block %s could not be removed from Cloudflare.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            $ip
+          );
+
+        return false;
+      }
+
+      if (!ResetWatermarkStore::set($ip, time())) {
+        /*
+         * Cloudflare has already reached the desired state. Restore the
+         * ownership claim so local state remains retryable rather than losing
+         * evidence that cleanup is incomplete.
+         */
+        BlockOwnership::add(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        );
+
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: IP address. */
+          __(
+            'Cloudflare removed stale Wordfence block %s, but Grey Rock could not record the local evidence reset.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          $ip
+        );
+
+        return false;
+      }
+
+      if (!BlockLogger::remove($ip)) {
+        BlockOwnership::add(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        );
+
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: IP address. */
+          __(
+            'Cloudflare removed stale Wordfence block %s, but Grey Rock could not clear its local synchronization record.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          $ip
+        );
+
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**

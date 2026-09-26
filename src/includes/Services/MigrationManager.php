@@ -46,6 +46,16 @@ final class MigrationManager {
     ) {
       self::migrate_to_1_1_1();
     }
+
+    if (
+      version_compare($to_version, '1.3.8', '>=')
+      && (
+        $from_version === null
+        || version_compare($from_version, '1.3.8', '<')
+      )
+    ) {
+      self::migrate_to_1_3_8();
+    }
   }
 
   private static function migrate_to_1_0_0(): void {
@@ -87,6 +97,17 @@ final class MigrationManager {
        SET synced_at = NULL
        WHERE fail_count > 0"
     );
+  }
+
+  /**
+   * Add explicit block ownership tracking.
+   *
+   * Existing synchronization rows are intentionally not backfilled. Their
+   * historical source cannot be proven safely from the synchronization row
+   * alone. Current owners are established by subsequent operations.
+   */
+  private static function migrate_to_1_3_8(): void {
+    BlockOwnership::create_table();
   }
 
   private static function has_existing_configuration(
