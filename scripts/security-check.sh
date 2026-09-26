@@ -14,32 +14,34 @@ cd "$REPO_ROOT" || exit 1
 mkdir -p "$REPORT_DIR"
 rm -f "$REPORT_DIR"/*
 
-echo "===== SEMGREP UPDATE ====="
+if [[ "${RUN_SEMGREP:-1}" == "1" ]]; then
+        echo "===== SEMGREP UPDATE ====="
 
-if [[ ! -x "$SEMGREP_PYTHON" ]]; then
-        echo "ERROR: Semgrep Python environment is missing: $SEMGREP_PYTHON" >&2
-        exit 1
-fi
+        if [[ ! -x "$SEMGREP_PYTHON" ]]; then
+                echo "ERROR: Semgrep Python environment is missing: $SEMGREP_PYTHON" >&2
+                exit 1
+        fi
 
-if ! "$SEMGREP_PYTHON" -m pip install \
-        --disable-pip-version-check \
-        --upgrade \
-        semgrep \
-        > "$REPORT_DIR/semgrep-upgrade.txt" 2>&1; then
+        if ! "$SEMGREP_PYTHON" -m pip install \
+                --disable-pip-version-check \
+                --upgrade \
+                semgrep \
+                > "$REPORT_DIR/semgrep-upgrade.txt" 2>&1; then
+                cat "$REPORT_DIR/semgrep-upgrade.txt"
+                echo "ERROR: Semgrep could not be upgraded to the latest stable release." >&2
+                exit 1
+        fi
+
         cat "$REPORT_DIR/semgrep-upgrade.txt"
-        echo "ERROR: Semgrep could not be upgraded to the latest stable release." >&2
-        exit 1
+
+        if [[ ! -x "$SEMGREP_BIN" ]]; then
+                echo "ERROR: Semgrep is unavailable after upgrade: $SEMGREP_BIN" >&2
+                exit 1
+        fi
+
+        printf "Semgrep after upgrade: %s\n" "$("$SEMGREP_BIN" --version)"
+        echo
 fi
-
-cat "$REPORT_DIR/semgrep-upgrade.txt"
-
-if [[ ! -x "$SEMGREP_BIN" ]]; then
-        echo "ERROR: Semgrep is unavailable after upgrade: $SEMGREP_BIN" >&2
-        exit 1
-fi
-
-printf "Semgrep after upgrade: %s\n" "$("$SEMGREP_BIN" --version)"
-echo
 
 status=0
 
