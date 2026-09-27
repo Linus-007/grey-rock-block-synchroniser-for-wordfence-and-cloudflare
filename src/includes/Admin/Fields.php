@@ -1461,7 +1461,15 @@ final class Fields {
         );
       }
 
-      BlockLogger::log($ip, 'manual: ' . $reason);
+      if (!BlockLogger::log($ip, 'manual: ' . $reason)) {
+        self::redirect_manual_block(
+          __(
+            'Cloudflare blocked the address, but Grey Rock could not record the local synchronization state.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          'error'
+        );
+      }
 
       self::redirect_manual_block(
         __('IP address blocked successfully.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),

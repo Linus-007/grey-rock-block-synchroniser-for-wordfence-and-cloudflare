@@ -55,14 +55,35 @@ final class BlockLogger {
     string $ip,
     string $reason = 'sync',
     ?string $expires_at = null
-  ): void {
+  ): bool {
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
     $now = current_time('mysql');
     $reason = self::normalize_reason($reason);
 
-    $wpdb->query(
+    if ($expires_at === null) {
+      return $wpdb->query(
+        $wpdb->prepare(
+          "INSERT INTO {$table}
+            (ip, reason, created_at, synced_at, expires_at, fail_count)
+           VALUES
+            (%s, %s, %s, %s, NULL, 0)
+           ON DUPLICATE KEY UPDATE
+            reason = VALUES(reason),
+            created_at = VALUES(created_at),
+            synced_at = VALUES(synced_at),
+            expires_at = NULL,
+            fail_count = 0",
+          $ip,
+          $reason,
+          $now,
+          $now
+        )
+      ) !== false;
+    }
+
+    return $wpdb->query(
       $wpdb->prepare(
         "INSERT INTO {$table}
           (ip, reason, created_at, synced_at, expires_at, fail_count)
@@ -80,7 +101,7 @@ final class BlockLogger {
         $now,
         $expires_at
       )
-    );
+    ) !== false;
   }
 
   public static function get_logs(
@@ -375,14 +396,35 @@ final class BlockLogger {
     string $ip,
     string $reason = 'sync',
     ?string $expires_at = null
-  ): void {
+  ): bool {
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
     $now = current_time('mysql');
     $reason = self::normalize_reason($reason);
 
-    $wpdb->query(
+    if ($expires_at === null) {
+      return $wpdb->query(
+        $wpdb->prepare(
+          "INSERT INTO {$table}
+            (ip, reason, created_at, synced_at, expires_at, fail_count)
+           VALUES
+            (%s, %s, %s, NULL, NULL, 1)
+           ON DUPLICATE KEY UPDATE
+            reason = VALUES(reason),
+            created_at = VALUES(created_at),
+            synced_at = NULL,
+            expires_at = NULL,
+            fail_count = LEAST(fail_count + 1, %d)",
+          $ip,
+          $reason,
+          $now,
+          self::MAX_FAILURES
+        )
+      ) !== false;
+    }
+
+    return $wpdb->query(
       $wpdb->prepare(
         "INSERT INTO {$table}
           (ip, reason, created_at, synced_at, expires_at, fail_count)
@@ -400,7 +442,7 @@ final class BlockLogger {
         $expires_at,
         self::MAX_FAILURES
       )
-    );
+    ) !== false;
   }
 
   /**

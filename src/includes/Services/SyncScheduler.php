@@ -863,7 +863,7 @@ final class SyncScheduler {
     }
 
     if ($mode !== 'account_list') {
-      self::record_batch_results($batch, $failed);
+      $failed = self::record_batch_results($batch, $failed);
     }
 
     update_option(
@@ -876,13 +876,17 @@ final class SyncScheduler {
 
       self::$lastErrorMessage = $client_error !== ''
         ? $client_error
-        : sprintf(
-          /* translators: %d: number of failed IP addresses */
-          __(
-            '%d IP address could not be synchronized.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ),
-          count($failed)
+        : (
+          self::$lastErrorMessage !== ''
+            ? self::$lastErrorMessage
+            : sprintf(
+              /* translators: %d: number of failed IP addresses */
+              __(
+                '%d IP address could not be synchronized.',
+                'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+              ),
+              count($failed)
+            )
         );
 
       return false;
@@ -981,15 +985,13 @@ final class SyncScheduler {
       $batch
     );
 
-    self::record_batch_results($batch, $failed);
-
-    return $failed;
+    return self::record_batch_results($batch, $failed);
   }
 
   private static function record_batch_results(
     array $batch,
     array $failed
-  ): void {
+  ): array {
     foreach ($batch as $entry) {
       $record_local = !array_key_exists(
         'record_local',
@@ -999,11 +1001,21 @@ final class SyncScheduler {
       $log_reason = 'sync: ' . $entry['reason'];
 
       if (in_array($entry['ip'], $failed, true)) {
-        if ($record_local) {
-          BlockLogger::mark_failed(
+        if (
+          $record_local
+          && !BlockLogger::mark_failed(
             $entry['ip'],
             $log_reason,
             $entry['expires_at']
+          )
+        ) {
+          self::$lastErrorMessage = sprintf(
+            /* translators: %s: IP address. */
+            __(
+              'Grey Rock could not record the failed synchronization state for %s.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            ),
+            $entry['ip']
           );
         }
 
@@ -1014,16 +1026,35 @@ final class SyncScheduler {
         continue;
       }
 
-      BlockLogger::log(
-        $entry['ip'],
-        $log_reason,
-        $entry['expires_at']
-      );
+      if (
+        !BlockLogger::log(
+          $entry['ip'],
+          $log_reason,
+          $entry['expires_at']
+        )
+      ) {
+        self::$lastErrorMessage = sprintf(
+          /* translators: %s: IP address. */
+          __(
+            'Cloudflare synchronized %s, but Grey Rock could not record the local synchronization state.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          ),
+          $entry['ip']
+        );
+
+        if (!in_array($entry['ip'], $failed, true)) {
+          $failed[] = $entry['ip'];
+        }
+
+        continue;
+      }
 
       if (!is_multisite() || !Config::uses_network_options()) {
         ResetWatermarkStore::clear($entry['ip']);
       }
     }
+
+    return $failed;
   }
 
   /**

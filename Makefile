@@ -35,6 +35,7 @@ validate:
 	@$(PHP) tests/static/reset-watermark-capacity-regression.php
 	@$(PHP) tests/static/multisite-shared-ip-attribution-regression.php
 	@$(PHP) tests/static/cleanup-reset-regression.php
+	@$(PHP) tests/static/block-logger-persistence-regression.php
 	@$(PHP) tests/static/block-ownership-regression.php
 	@$(PHP) tests/static/network-manual-ownership-regression.php
 	@$(PHP) tests/static/block-ownership-resolver-regression.php

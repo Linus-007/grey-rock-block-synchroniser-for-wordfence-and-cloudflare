@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.8
+Stable tag: 1.3.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -464,6 +464,11 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.9 =
+* Fixed permanent synchronization records being stored with a zero-date expiration instead of SQL NULL, which could cause successful permanent blocks to disappear from the Synchronisation Log during cleanup.
+* Added explicit handling for synchronization-log database write failures so Cloudflare success is not reported as a complete synchronization when local state could not be recorded.
+* Added regression and WordPress/MariaDB integration coverage for permanent synchronization persistence.
 
 = 1.3.8 =
 * Fixed synchronization of permanent manual Wordfence IP blocks and added ownership tracking for Wordfence, manual and shared-network block sources.

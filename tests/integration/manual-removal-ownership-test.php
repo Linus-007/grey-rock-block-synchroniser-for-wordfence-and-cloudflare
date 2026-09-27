@@ -26,7 +26,7 @@ function manual_removal_assert(
   }
 }
 
-$test_ip = '8.8.4.4';
+$test_ip = '176.31.182.86';
 
 /*
  * Ensure the test begins from a known local state.
@@ -42,9 +42,29 @@ ResetWatermarkStore::clear($test_ip);
  * Establish the state that exists after Grey Rock has manually synchronized
  * an address to Cloudflare.
  */
-BlockLogger::log(
-  $test_ip,
-  'manual: integration ownership-removal test'
+manual_removal_assert(
+  BlockLogger::log(
+    $test_ip,
+    'manual: integration ownership-removal test'
+  ),
+  'Could not establish synchronization provenance.'
+);
+
+global $wpdb;
+
+$expires_at = $wpdb->get_var(
+  $wpdb->prepare(
+    "SELECT expires_at
+     FROM {$wpdb->prefix}wpcf_sync_blocks
+     WHERE ip = %s
+     LIMIT 1",
+    $test_ip
+  )
+);
+
+manual_removal_assert(
+  $expires_at === null,
+  'Permanent synchronization did not persist expires_at as SQL NULL.'
 );
 
 manual_removal_assert(
