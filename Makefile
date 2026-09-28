@@ -30,7 +30,7 @@ validate:
 	@$(PHP) tests/static/action-feedback-regression.php
 	@$(PHP) tests/static/dns-allow-list-regression.php
 	@$(PHP) tests/static/wordfence-9-compatibility-regression.php
-	@$(PHP) tests/static/maintenance-1.3.4-regression.php
+	@$(PHP) tests/static/historical-block-evidence-regression.php
 	@$(PHP) tests/static/cloudflare-inventory-regression.php
 	@$(PHP) tests/static/reset-watermark-capacity-regression.php
 	@$(PHP) tests/static/multisite-shared-ip-attribution-regression.php

@@ -105,7 +105,6 @@ final class HistoricalBlockReader {
       $watermark = max(
         0,
         (int) ($watermarks[$ip] ?? 0),
-        BlockLogger::get_synced_timestamp($ip),
         ResetWatermarkStore::get($ip)
       );
 

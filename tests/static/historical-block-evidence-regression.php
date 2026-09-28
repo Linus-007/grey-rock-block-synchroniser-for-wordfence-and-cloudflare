@@ -153,22 +153,22 @@ $wpdb->rows = [
   [
     'ip_hex' => wf_ip_hex($ip),
     'event_time' => $now - 40,
-    'event_url' => 'http://sweers.ch/wp-json/test',
+    'event_url' => 'http://greyscale.zone/wp-json/test',
   ],
   [
     'ip_hex' => wf_ip_hex($ip),
     'event_time' => $now - 50,
-    'event_url' => 'https://sweers.ch/second',
+    'event_url' => 'https://greyscale.zone/second',
   ],
   [
     'ip_hex' => wf_ip_hex($ip),
     'event_time' => $now - 60,
-    'event_url' => 'https://sweers.ch/third',
+    'event_url' => 'https://greyscale.zone/third',
   ],
   [
     'ip_hex' => wf_ip_hex($ip),
     'event_time' => $now - 30,
-    'event_url' => 'https://sweers.ch.attacker.example/trap',
+    'event_url' => 'https://greyscale.zone.attacker.example/trap',
   ],
   [
     'ip_hex' => wf_ip_hex($ip),
@@ -178,42 +178,48 @@ $wpdb->rows = [
   [
     'ip_hex' => wf_ip_hex($second_ip),
     'event_time' => $now - 10,
-    'event_url' => 'https://sweers.ch/ipv6',
+    'event_url' => 'https://greyscale.zone/ipv6',
   ],
 ];
 
-$sweers = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 1, ['sweers.ch']);
 $greyscale = \WPCF\FirewallSync\Services\HistoricalBlockReader::
   get_candidates(24, 1, ['greyscale.zone']);
+$altus = \WPCF\FirewallSync\Services\HistoricalBlockReader::
+  get_candidates(24, 1, ['altus.salus.zone']);
 $salus = \WPCF\FirewallSync\Services\HistoricalBlockReader::
   get_candidates(24, 1, ['salus.zone']);
 
-maintenance_assert(count($sweers) === 2, 'Sweers attribution failed.');
-maintenance_assert($greyscale === [], 'Evidence leaked to greyscale.zone.');
+maintenance_assert(count($greyscale) === 2, 'Greyscale attribution failed.');
+maintenance_assert($altus === [], 'Evidence leaked to altus.salus.zone.');
 maintenance_assert(
   count($salus) === 1 && $salus[0]['event_count'] === 1,
   'A genuine second-site attack was not independently attributable.'
 );
 maintenance_assert(
-  $sweers[1]['event_count'] === 3,
-  'A host-prefix attack was incorrectly matched to sweers.ch.'
+  $greyscale[1]['event_count'] === 3,
+  'A host-prefix attack was incorrectly matched to greyscale.zone.'
 );
 
+/*
+ * A successful synchronization is synchronization state, not an evidence
+ * reset. Historical Wordfence evidence must remain part of the desired state
+ * for the full configured lookback period so ownership reconciliation does
+ * not remove a still-valid Cloudflare block on the next synchronization.
+ */
 $wpdb->synced[$ip] = gmdate('Y-m-d H:i:s', $now - 45);
 $post_sync = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 3, ['sweers.ch']);
+  get_candidates(24, 3, ['greyscale.zone']);
 maintenance_assert(
-  !in_array($ip, array_column($post_sync, 'ip'), true),
-  'Pre-watermark events were reused toward a threshold.'
+  in_array($ip, array_column($post_sync, 'ip'), true),
+  'Successful synchronization incorrectly suppressed current historical evidence.'
 );
 
-$wpdb->synced[$ip] = gmdate('Y-m-d H:i:s', $now - 70);
-$requalified = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 3, ['sweers.ch']);
+$wpdb->synced[$ip] = gmdate('Y-m-d H:i:s', $now - 5);
+$still_current = \WPCF\FirewallSync\Services\HistoricalBlockReader::
+  get_candidates(24, 3, ['greyscale.zone']);
 maintenance_assert(
-  in_array($ip, array_column($requalified, 'ip'), true),
-  'Three newer attributable events did not requalify the IP.'
+  in_array($ip, array_column($still_current, 'ip'), true),
+  'A newer synchronization timestamp incorrectly removed Wordfence desired-state evidence.'
 );
 
 unset($wpdb->synced[$ip]);
@@ -222,7 +228,7 @@ unset($wpdb->synced[$ip]);
   $now - 45
 );
 $reset_blocked = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 3, ['sweers.ch']);
+  get_candidates(24, 3, ['greyscale.zone']);
 maintenance_assert(
   !in_array($ip, array_column($reset_blocked, 'ip'), true),
   'Pre-reset evidence recreated an IP.'
@@ -324,4 +330,4 @@ maintenance_assert(
   'Network reconciliation is not gated on every site succeeding.'
 );
 
-echo "Grey Rock 1.3.4 maintenance regression: PASS\n";
+echo "Historical block evidence regression: PASS\n";

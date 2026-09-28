@@ -27,17 +27,11 @@ function ownership_migration_assert(
 global $wpdb;
 
 $version = Plugin::get_version();
-
-ownership_migration_assert(
-  $version === '1.3.9',
-  "Expected Grey Rock 1.3.9, found {$version}."
-);
-
 $stored_version = get_option('firewall_sync_version');
 
 ownership_migration_assert(
-  $stored_version === '1.3.9',
-  'Stored Grey Rock migration version is not 1.3.9.'
+  is_string($stored_version) && $stored_version === $version,
+  "Stored Grey Rock migration version {$stored_version} does not match installed version {$version}."
 );
 
 $table = $wpdb->prefix . BlockOwnership::TABLE;
@@ -97,4 +91,4 @@ ownership_migration_assert(
   'Ownership table does not have the required composite primary key (ip, owner).'
 );
 
-echo "PASS: Grey Rock 1.3.9 migration state includes the expected ownership table.\n";
+echo "PASS: Grey Rock migration state matches the installed version and includes the expected ownership table.\n";

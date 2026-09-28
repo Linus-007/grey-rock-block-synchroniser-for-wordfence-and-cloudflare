@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.3.9
+Stable tag: 1.3.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -464,6 +464,11 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.10 =
+* Fixed historical Wordfence WAF evidence being suppressed by a successful synchronization timestamp, which could cause still-valid Wordfence-owned blocks to be removed from Cloudflare during ownership reconciliation.
+* Preserved explicit reset-watermark behavior so intentionally cleared evidence remains suppressed while current historical evidence continues to represent Wordfence desired state.
+* Expanded historical-evidence regression coverage and renamed the regression test to reflect its current purpose.
 
 = 1.3.9 =
 * Fixed permanent synchronization records being stored with a zero-date expiration instead of SQL NULL, which could cause successful permanent blocks to disappear from the Synchronisation Log during cleanup.
