@@ -131,6 +131,7 @@ if 'version' in a or '--version' in a or '--field=version' in a or 'php' in a: p
             source = (ROOT / 'scripts' / name).read_text()
             self.assertNotIn('--admin_password=', source)
             command = re.search(r"--entrypoint sh cli -c '(.*?)' sh", source, re.S).group(1)
+            self.assertIn('eval-file --use-include /artifacts/install-test-wordpress.php', command)
             with tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 password = secrets.token_hex(24)
@@ -147,6 +148,33 @@ if 'version' in a or '--version' in a or '--field=version' in a or 'php' in a: p
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn(password, result.stdout + result.stderr)
                 self.assertIn('Disposable WordPress installed.', result.stdout)
+
+    @unittest.skipUnless(shutil.which('php'), 'PHP CLI is required')
+    def test_installer_include_reaches_input_and_bootstrap(self):
+        # Match WP-CLI execute_eval's method scope and global positional $args.
+        # No database or credential is needed: stop at controlled early stages.
+        installer = ROOT / 'tests/integration/install-test-wordpress.php'
+        driver = r'''class InstallerRunner {
+            public static function run($file, $positional_args) {
+                global $args;
+                $args = $positional_args;
+                include $file;
+            }
+        }
+        InstallerRunner::run($argv[1], array_slice($argv, 2));'''
+        with tempfile.TemporaryDirectory() as directory:
+            driver_file = Path(directory) / 'runner.php'
+            driver_file.write_text('<?php\n' + driver)
+            (Path(directory) / 'wp-load.php').write_text(
+                '<?php throw new RuntimeException("withheld-bootstrap-detail");')
+            for args, stage in [([], 'input'), (['http://fixture.invalid'], 'bootstrap')]:
+                with self.subTest(stage=stage):
+                    result = subprocess.run(['php', str(driver_file), str(installer), *args],
+                                            cwd=directory, capture_output=True, text=True, timeout=5)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, '')
+                    self.assertIn('GREYROCK_INSTALL_EXCEPTION_STAGE=' + stage, result.stderr)
+                    self.assertNotIn('withheld-bootstrap-detail', result.stderr)
 
     def test_invalid_timeout_is_rejected_without_execution(self):
         driver = f'source "{ROOT}/scripts/integration-harness.sh"; COMPOSE_COMMAND=(false); compose ps'

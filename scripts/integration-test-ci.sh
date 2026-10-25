@@ -238,6 +238,7 @@ compose restart wordpress
 
 echo "===== INSTALL WORDPRESS ====="
 
+# Include preserves strict_types on PHP 8.2–8.4; eval-file otherwise prepends a closing tag.
 # Only this disposable CLI process runs as container root to read the 0600
 # bind-mounted credential. PHP reads it inside the container; the secret
 # never traverses host command arguments or stdin.
@@ -249,7 +250,7 @@ compose run --rm --no-TTY --user 0:0 --entrypoint sh cli -c '
 diagnostic_file="$(mktemp)" || exit 1
 chmod 600 "$diagnostic_file"
 
-if wp --allow-root --skip-wordpress eval-file /artifacts/install-test-wordpress.php "$1" >"$diagnostic_file" 2>&1; then
+if wp --allow-root --skip-wordpress eval-file --use-include /artifacts/install-test-wordpress.php "$1" >"$diagnostic_file" 2>&1; then
     rm -f "$diagnostic_file"
     echo "Disposable WordPress installed."
 else

@@ -274,12 +274,13 @@ echo "PASS: WordPress HTTP service is available."
 echo
 echo "===== INSTALL WORDPRESS AND PLUGINS ====="
 
+# Include preserves strict_types on PHP 8.2–8.4; eval-file otherwise prepends a closing tag.
 # The shared Compose file mounts the 0600 credential read-only. PHP reads it
 # inside the container; installer output is withheld before sudo can record it.
 compose run --rm --no-TTY --user 0:0 --entrypoint sh cli -c '
 # Suppress every byte inside the container, before sudo I/O logging.
 # Exceptions or installer hooks may include arguments in their diagnostics.
-if wp --allow-root --skip-wordpress eval-file /artifacts/install-test-wordpress.php "$1" >/dev/null 2>&1; then
+if wp --allow-root --skip-wordpress eval-file --use-include /artifacts/install-test-wordpress.php "$1" >/dev/null 2>&1; then
     echo "Disposable WordPress installed."
 else
     echo "ERROR: Disposable WordPress installation failed (details withheld)." >&2
