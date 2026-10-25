@@ -6,7 +6,7 @@ services:
     container_name: greyrock-plugin-test-db
     restart: "no"
     environment:
-      MARIADB_DATABASE: wordpress
+      MARIADB_DATABASE: "${TEST_DB_NAME:-wordpress}"
       MARIADB_USER: wordpress
       MARIADB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
       MARIADB_ROOT_PASSWORD: "${TEST_DB_ROOT_PASSWORD:?TEST_DB_ROOT_PASSWORD is required}"
@@ -36,7 +36,7 @@ services:
       - "127.0.0.1:18080:80"
     environment:
       WORDPRESS_DB_HOST: db:3306
-      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_NAME: "${TEST_DB_NAME:-wordpress}"
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
       WORDPRESS_DEBUG: "1"
@@ -49,6 +49,10 @@ services:
         define('WP_AUTO_UPDATE_CORE', false);
     volumes:
       - wordpress-data:/var/www/html
+      - type: bind
+        source: ./php-security.ini
+        target: /usr/local/etc/php/conf.d/zz-greyrock-security.ini
+        read_only: true
     networks:
       - test-network
 
@@ -64,11 +68,24 @@ services:
     environment:
       HOME: /tmp
       WORDPRESS_DB_HOST: db:3306
-      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_NAME: "${TEST_DB_NAME:-wordpress}"
       WORDPRESS_DB_USER: wordpress
+      WORDPRESS_CONFIG_EXTRA: "define('WP_ENVIRONMENT_TYPE', 'local');"
       WORDPRESS_DB_PASSWORD: "${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}"
     volumes:
+      - type: bind
+        source: ./php-security.ini
+        target: /usr/local/etc/php/conf.d/zz-greyrock-security.ini
+        read_only: true
+      - type: bind
+        source: "${ADMIN_PASSWORD_FILE:?ADMIN_PASSWORD_FILE is required}"
+        target: /run/greyrock-admin-password
+        read_only: true
       - wordpress-data:/var/www/html
+      - type: bind
+        source: ./../integration/install-test-wordpress.php
+        target: /artifacts/install-test-wordpress.php
+        read_only: true
       - type: bind
         source: "${PLUGIN_ZIP:?PLUGIN_ZIP is required}"
         target: /artifacts/greyrock-plugin.zip
@@ -82,12 +99,24 @@ services:
         target: /artifacts/wordfence-block-api-probe.php
         read_only: true
       - type: bind
+        source: ./../integration/wordpress-compatibility-test.php
+        target: /artifacts/wordpress-compatibility-test.php
+        read_only: true
+      - type: bind
         source: "${OWNERSHIP_MIGRATION_TEST_FILE:?OWNERSHIP_MIGRATION_TEST_FILE is required}"
         target: /artifacts/ownership-migration-test.php
         read_only: true
       - type: bind
         source: "${MANUAL_REMOVAL_OWNERSHIP_TEST_FILE:?MANUAL_REMOVAL_OWNERSHIP_TEST_FILE is required}"
         target: /artifacts/manual-removal-ownership-test.php
+        read_only: true
+      - type: bind
+        source: ./../integration/task13-mariadb-worker.php
+        target: /artifacts/task13-mariadb-worker.php
+        read_only: true
+      - type: bind
+        source: ./../integration/task14-mariadb-suite.php
+        target: /artifacts/task14-mariadb-suite.php
         read_only: true
     networks:
       - test-network

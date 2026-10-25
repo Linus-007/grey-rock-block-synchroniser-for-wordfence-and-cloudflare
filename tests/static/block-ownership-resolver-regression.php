@@ -32,6 +32,8 @@ function is_multisite(): bool {
   return true;
 }
 
+function get_current_network_id(): int { return 1; }
+
 function get_sites(array $args): array {
   return [1, 2, 3];
 }

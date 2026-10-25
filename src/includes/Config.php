@@ -111,7 +111,7 @@ final class Config {
       ['zone_access_rules', 'account_list'],
       true
     )
-      ? $input['cloudflare_mode']
+      ? ($input['cloudflare_mode'] ?? 'zone_access_rules')
       : 'zone_access_rules';
 
     $output['cloudflare_api_token'] =
@@ -268,11 +268,17 @@ final class Config {
     /*
      * Disabled fields are not included in an HTML form submission. Use a
      * previously stored site configuration when one exists. Otherwise,
-     * initialize the site override from the displayed network defaults.
+     * initialize public defaults while requiring a separate site credential.
      */
     $base = self::has_existing_site_configuration($existing)
       ? $existing
       : self::get_network_options();
+
+    if (!self::has_existing_site_configuration($existing)) {
+      // Preserve public defaults, but never grant a site administrator a copy
+      // of the network credential when enabling an independent override.
+      unset($base['cloudflare_api_token']);
+    }
 
     $merged = array_merge($base, $input);
     $merged['configuration_source'] = self::SOURCE_SITE;

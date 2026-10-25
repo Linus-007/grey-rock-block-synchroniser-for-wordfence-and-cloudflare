@@ -40,7 +40,7 @@ final class BlockLogger {
       KEY expires_at (expires_at),
       KEY created_at (created_at),
       KEY synchronization_state (synced_at, fail_count)
-    ) {$charset_collate};";
+    ) ENGINE=InnoDB {$charset_collate};";
 
     dbDelta($sql);
   }
@@ -56,6 +56,17 @@ final class BlockLogger {
     string $reason = 'sync',
     ?string $expires_at = null
   ): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::log($ip, $reason, $expires_at), [$wpdb->prefix . self::TABLE]);
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
@@ -381,12 +392,16 @@ final class BlockLogger {
 
     $table = $wpdb->prefix . self::TABLE;
 
-    return $wpdb->get_col(
+    $ips = $wpdb->get_col(
       "SELECT ip
        FROM {$table}
        WHERE synced_at IS NOT NULL
          AND fail_count = 0"
     );
+    if (($wpdb->last_error ?? '') !== '') {
+      throw new \RuntimeException('Grey Rock could not read complete synchronization state.');
+    }
+    return $ips;
   }
 
   /**
@@ -395,9 +410,22 @@ final class BlockLogger {
   public static function mark_failed(
     string $ip,
     string $reason = 'sync',
-    ?string $expires_at = null
+    ?string $expires_at = null,
+    bool $count_failure = true
   ): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::mark_failed($ip, $reason, $expires_at, $count_failure), [$wpdb->prefix . self::TABLE]);
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     global $wpdb;
+    $increment = $count_failure ? 1 : 0;
 
     $table = $wpdb->prefix . self::TABLE;
     $now = current_time('mysql');
@@ -409,13 +437,13 @@ final class BlockLogger {
           "INSERT INTO {$table}
             (ip, reason, created_at, synced_at, expires_at, fail_count)
            VALUES
-            (%s, %s, %s, NULL, NULL, 1)
+            (%s, %s, %s, NULL, NULL, {$increment})
            ON DUPLICATE KEY UPDATE
             reason = VALUES(reason),
             created_at = VALUES(created_at),
             synced_at = NULL,
             expires_at = NULL,
-            fail_count = LEAST(fail_count + 1, %d)",
+            fail_count = LEAST(fail_count + {$increment}, %d)",
           $ip,
           $reason,
           $now,
@@ -429,13 +457,13 @@ final class BlockLogger {
         "INSERT INTO {$table}
           (ip, reason, created_at, synced_at, expires_at, fail_count)
          VALUES
-          (%s, %s, %s, NULL, %s, 1)
+          (%s, %s, %s, NULL, %s, {$increment})
          ON DUPLICATE KEY UPDATE
           reason = VALUES(reason),
           created_at = VALUES(created_at),
           synced_at = NULL,
           expires_at = VALUES(expires_at),
-          fail_count = LEAST(fail_count + 1, %d)",
+          fail_count = LEAST(fail_count + {$increment}, %d)",
         $ip,
         $reason,
         $now,
@@ -473,6 +501,17 @@ final class BlockLogger {
    * An absent record is already the required final state.
    */
   public static function remove(string $ip): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::remove($ip), [$wpdb->prefix . self::TABLE]);
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;

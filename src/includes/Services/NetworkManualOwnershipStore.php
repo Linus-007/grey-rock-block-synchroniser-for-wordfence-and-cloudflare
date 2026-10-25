@@ -17,6 +17,13 @@ final class NetworkManualOwnershipStore {
    * Record a network-level manual ownership claim.
    */
   public static function add(string $ip): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::add($ip));
+    }
+
+    if (class_exists(SyncScheduler::class)) { SyncScheduler::assert_active_lease(); }
+    if (class_exists(DestinationLease::class)) { DestinationLease::assert_held_leases(); }
     $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     if ($ip === '') {
@@ -40,6 +47,13 @@ final class NetworkManualOwnershipStore {
    * An absent entry is already the required final state.
    */
   public static function remove(string $ip): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::remove($ip));
+    }
+
+    if (class_exists(SyncScheduler::class)) { SyncScheduler::assert_active_lease(); }
+    if (class_exists(DestinationLease::class)) { DestinationLease::assert_held_leases(); }
     $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     if ($ip === '') {
@@ -83,7 +97,7 @@ final class NetworkManualOwnershipStore {
    * @return array<string, true>
    */
   private static function read(): array {
-    $raw = get_site_option(self::OPTION, []);
+    $raw = AtomicFence::option(self::OPTION, true);
 
     if (!is_array($raw)) {
       return [];
@@ -116,8 +130,10 @@ final class NetworkManualOwnershipStore {
    * @param array<string, true> $ips
    */
   private static function write(array $ips): bool {
+    if (class_exists(SyncScheduler::class)) { SyncScheduler::assert_active_lease(); }
+    if (class_exists(DestinationLease::class)) { DestinationLease::assert_held_leases(); }
     ksort($ips, SORT_STRING);
 
-    return update_site_option(self::OPTION, $ips);
+    return AtomicFence::option(self::OPTION, true, true, $ips);
   }
 }

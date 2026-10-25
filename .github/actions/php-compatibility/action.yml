@@ -1,0 +1,22 @@
+name: Validate current stable PHP candidate
+description: Resolve stable PHP and require runtime and static compatibility checks
+runs:
+  using: composite
+  steps:
+    - name: Resolve latest stable PHP
+      shell: bash
+      run: python3 scripts/php-runtime.py >> "$GITHUB_ENV"
+    - name: Install resolved PHP
+      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      with:
+        php-version: ${{ env.EXPECTED_PHP_VERSION }}
+        extensions: mbstring, dom, simplexml, xmlreader, xmlwriter
+        coverage: none
+        tools: composer
+      env:
+        update: 'true'
+    - name: Verify runtime and compatibility
+      shell: bash
+      run: |
+        python3 scripts/php-runtime.py --verify "$(php -r 'echo PHP_VERSION;')" "$EXPECTED_PHP_VERSION" --exact
+        make validate

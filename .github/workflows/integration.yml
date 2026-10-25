@@ -5,7 +5,10 @@ on:
   push:
     branches:
       - main
+  workflow_call:
   workflow_dispatch:
+  schedule:
+    - cron: '23 8 * * 3'
 
 permissions:
   contents: read
@@ -15,20 +18,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  wordpress-integration:
-    name: WordPress integration test
+  runtime-policy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    outputs:
+      matrix: ${{ steps.policy.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - id: policy
+        run: echo "matrix=$(python3 scripts/php-runtime.py --matrix)" >> "$GITHUB_OUTPUT"
+
+  wordpress-integration:
+    name: Security runtime (${{ matrix.branch }})
+    needs: runtime-policy
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.runtime-policy.outputs.matrix) }}
+    env:
+      PHP_TEST_BRANCH: ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          php-version: '8.3'
-          coverage: none
+          persist-credentials: false
+
+      - name: Validate latest stable PHP compatibility
+        uses: ./.github/actions/php-compatibility
 
       - name: Resolve plugin version
         id: version
@@ -49,6 +68,57 @@ jobs:
 
       - name: Run disposable WordPress integration test
         run: ./scripts/integration-test-ci.sh
+
+      - name: Publish integration summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f reports/integration-ci/summary.txt ]]; then
+            {
+              echo '## WordPress integration test'
+              echo
+              echo '```text'
+              cat reports/integration-ci/summary.txt
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  real-innodb:
+    name: Mandatory real InnoDB concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GREY_ROCK_TASK14_FENCING: '1'
+      GREY_ROCK_COMPOSE_TIMEOUT_SECONDS: '900'
+      TEST_DB_NAME: greyrock_task13_ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Validate latest stable PHP compatibility
+        uses: ./.github/actions/php-compatibility
+
+      - name: Resolve plugin version
+        id: version
+        shell: bash
+        run: |
+          version="$(
+            sed -nE \
+              's/^[[:space:]]*\*[[:space:]]Version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p' \
+              src/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php |
+            head -n 1
+          )"
+
+          test -n "${version}"
+          echo "value=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build validated release ZIP
+        run: make release VERSION="${{ steps.version.outputs.value }}"
+
+      - name: Run all 180 disposable InnoDB scenarios
+        run: timeout --signal=TERM --kill-after=120s 75m ./scripts/integration-test-ci.sh
 
       - name: Publish integration summary
         if: always()

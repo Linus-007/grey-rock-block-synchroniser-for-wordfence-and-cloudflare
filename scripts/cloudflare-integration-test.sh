@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set +x +v
 set -Eeuo pipefail
 
 if [[ "$EUID" -ne 0 ]]; then
@@ -9,9 +10,9 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/tests/docker/compose.yml"
-PLUGIN_ZIP="$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip"
+PLUGIN_ZIP="${GREY_ROCK_VALIDATION_ZIP:-$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip}"
 PHP_TEST="$REPO_ROOT/tests/integration/cloudflare-live-test.php"
-CACHE_DIR="${HOME}/.cache/grey-rock-tests"
+CACHE_DIR="${GREY_ROCK_TEST_CACHE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.tools/test-session}"
 SESSION_ENV="$CACHE_DIR/session.env"
 SESSION_RESOLVER="$REPO_ROOT/scripts/resolve-test-session.sh"
 INTEGRATION_TEST_FILE="$REPO_ROOT/tests/integration/admin-action-button-test.php"
@@ -44,21 +45,8 @@ cleanup() {
 	set +e
 
 	if [[ "$COMPOSE_READY" -eq 1 ]]; then
-		docker compose \
-			--env-file "$RUNTIME_ENV" \
-			--project-name "$PROJECT_NAME" \
-			--file "$COMPOSE_FILE" \
-			--file "$OVERRIDE_FILE" \
-			logs --no-color \
-			> "$REPORT_DIR/compose-final.log" 2>&1
-
-		docker compose \
-			--env-file "$RUNTIME_ENV" \
-			--project-name "$PROJECT_NAME" \
-			--file "$COMPOSE_FILE" \
-			--file "$OVERRIDE_FILE" \
-			down --volumes --remove-orphans \
-			> "$REPORT_DIR/cleanup.log" 2>&1
+        compose logs --no-color > "$REPORT_DIR/compose-final.log" 2>&1
+        compose down --volumes --remove-orphans > "$REPORT_DIR/cleanup.log" 2>&1
 	fi
 
 	systemctl stop \
@@ -197,7 +185,11 @@ chmod 0400 "$SECRET_JSON"
 
 unset CLOUDFLARE_API_TOKEN
 
+ADMIN_PASSWORD_FILE="$RUNTIME_DIR/admin-password"
+(umask 077; openssl rand -hex 24 > "$ADMIN_PASSWORD_FILE")
+
 cat > "$RUNTIME_ENV" <<EOF
+ADMIN_PASSWORD_FILE=$ADMIN_PASSWORD_FILE
 TEST_DB_PASSWORD=$(openssl rand -hex 24)
 TEST_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
 PLUGIN_ZIP=$PLUGIN_ZIP
@@ -230,7 +222,9 @@ YAML
 
 chmod 0600 "$OVERRIDE_FILE"
 
-COMPOSE=(
+source "$REPO_ROOT/scripts/integration-harness.sh"
+
+COMPOSE_COMMAND=(
 	docker compose
 	--env-file "$RUNTIME_ENV"
 	--project-name "$PROJECT_NAME"
@@ -238,7 +232,7 @@ COMPOSE=(
 	--file "$OVERRIDE_FILE"
 )
 
-"${COMPOSE[@]}" config --quiet
+compose config --quiet
 COMPOSE_READY=1
 
 echo "===== START DOCKER ====="
@@ -252,8 +246,8 @@ docker info >/dev/null
 echo
 echo "===== START DISPOSABLE WORDPRESS STACK ====="
 
-"${COMPOSE[@]}" pull db wordpress cli
-"${COMPOSE[@]}" up --detach db wordpress
+compose pull db wordpress cli
+compose up --detach db wordpress
 
 wordpress_ready=0
 
@@ -280,32 +274,35 @@ echo "PASS: WordPress HTTP service is available."
 echo
 echo "===== INSTALL WORDPRESS AND PLUGINS ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
-	--allow-root \
-	core install \
-	--url="$TEST_URL" \
-	--title="Greyrock Cloudflare Live Test" \
-	--admin_user="greyrock-test-admin" \
-	--admin_password="$(openssl rand -hex 24)" \
-	--admin_email="greyrock-test@example.invalid" \
-	--skip-email
+# The shared Compose file mounts the 0600 credential read-only. PHP reads it
+# inside the container; installer output is withheld before sudo can record it.
+compose run --rm --no-TTY --user 0:0 --entrypoint sh cli -c '
+# Suppress every byte inside the container, before sudo I/O logging.
+# Exceptions or installer hooks may include arguments in their diagnostics.
+if wp --allow-root --skip-wordpress eval-file /artifacts/install-test-wordpress.php "$1" >/dev/null 2>&1; then
+    echo "Disposable WordPress installed."
+else
+    echo "ERROR: Disposable WordPress installation failed (details withheld)." >&2
+    exit 1
+fi
+' sh "$TEST_URL"
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
 	--allow-root \
 	plugin install wordfence \
 	--activate
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
 	--allow-root \
 	plugin install /artifacts/greyrock-plugin.zip \
 	--force \
 	--activate
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
 	--allow-root \
 	plugin is-active wordfence
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
 	--allow-root \
 	plugin is-active \
 	grey-rock-block-synchroniser-for-wordfence-and-cloudflare
@@ -313,7 +310,7 @@ echo "===== INSTALL WORDPRESS AND PLUGINS ====="
 echo
 echo "===== RUN LIVE CLOUDFLARE PLUGIN TEST ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
 	--allow-root \
 	eval-file /tests/cloudflare-live-test.php \
 	2>&1 | tee "$REPORT_DIR/test-output.txt"

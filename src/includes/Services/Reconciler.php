@@ -12,6 +12,17 @@ final class Reconciler {
     ?array $complete_inventory = null,
     bool $allow_purge = true
   ): array {
+    try {
+      return self::execute($client, $options, $complete_inventory, $allow_purge);
+    } catch (\RuntimeException) {
+      return [
+        'complete' => false, 'missing_in_cf' => [], 'orphaned_in_cf' => [], 'purged' => [],
+        'error' => __('Reconciliation stopped because complete local synchronization state could not be read.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      ];
+    }
+  }
+
+  private static function execute(Client $client, array $options, ?array $complete_inventory, bool $allow_purge): array {
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
 
     if ($mode === 'account_list') {
@@ -84,24 +95,11 @@ final class Reconciler {
     $purged = [];
 
     foreach ($missing_ips as $ip) {
-      if (!ResetWatermarkStore::set($ip, $reset_at)) {
-        return [
-          'purged' => $purged,
-          'error' => __(
-            'Local cleanup stopped because the reset-watermark store is at safe capacity. No required watermark was evicted.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ),
-        ];
-      }
-
-      if (!BlockLogger::remove($ip)) {
-        return [
-          'purged' => $purged,
-          'error' => __(
-            'Local cleanup stopped because a synchronization record could not be removed safely.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ),
-        ];
+      $stored = AtomicFence::run(static function () use ($ip, $reset_at): bool {
+        return ResetWatermarkStore::set($ip, $reset_at) && BlockLogger::remove($ip);
+      });
+      if (!$stored) {
+        return ['purged' => $purged, 'error' => __('Local cleanup could not be stored safely.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')];
       }
 
       $purged[] = $ip;

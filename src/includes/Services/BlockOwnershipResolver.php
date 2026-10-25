@@ -15,6 +15,16 @@ use WPCF\FirewallSync\Config;
  * Cloudflare block can be removed.
  */
 final class BlockOwnershipResolver {
+  private static function complete_site_ids(): array {
+    $sites = get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]);
+    // An active multisite request must have at least its current site. Empty
+    // query/filter results are not evidence that no shared owner exists.
+    if (!is_array($sites) || $sites === []) {
+      throw new \RuntimeException('Grey Rock could not read a complete multisite ownership scope.');
+    }
+    return $sites;
+  }
+
   public static function has_any_for_effective_destination(
     string $ip
   ): bool {
@@ -35,7 +45,7 @@ final class BlockOwnershipResolver {
       return true;
     }
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (self::complete_site_ids() as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {
@@ -70,7 +80,7 @@ final class BlockOwnershipResolver {
       return true;
     }
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (self::complete_site_ids() as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {
@@ -113,7 +123,7 @@ final class BlockOwnershipResolver {
 
     $current_blog_id = get_current_blog_id();
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (self::complete_site_ids() as $blog_id) {
       $blog_id = (int) $blog_id;
 
       switch_to_blog($blog_id);

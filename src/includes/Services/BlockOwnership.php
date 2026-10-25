@@ -38,7 +38,7 @@ final class BlockOwnership {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (ip, owner),
       KEY owner (owner)
-    ) {$charset_collate};";
+    ) ENGINE=InnoDB {$charset_collate};";
 
     dbDelta($sql);
   }
@@ -47,6 +47,17 @@ final class BlockOwnership {
    * Add ownership for an IP address.
    */
   public static function add(string $ip, string $owner): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::add($ip, $owner), [$wpdb->prefix . self::TABLE]);
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     global $wpdb;
 
     if (!self::is_valid_owner($owner)) {
@@ -79,6 +90,17 @@ final class BlockOwnership {
    * An absent ownership row is already the required final state.
    */
   public static function remove(string $ip, string $owner): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::remove($ip, $owner), [$wpdb->prefix . self::TABLE]);
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     global $wpdb;
 
     if (!self::is_valid_owner($owner)) {
@@ -112,7 +134,7 @@ final class BlockOwnership {
 
     $table = $wpdb->prefix . self::TABLE;
 
-    return (bool) $wpdb->get_var(
+    $result = $wpdb->get_var(
       $wpdb->prepare(
         "SELECT 1
          FROM {$table}
@@ -123,6 +145,8 @@ final class BlockOwnership {
         $owner
       )
     );
+    self::assert_read_succeeded();
+    return (bool) $result;
   }
 
   /**
@@ -133,7 +157,7 @@ final class BlockOwnership {
 
     $table = $wpdb->prefix . self::TABLE;
 
-    return (bool) $wpdb->get_var(
+    $result = $wpdb->get_var(
       $wpdb->prepare(
         "SELECT 1
          FROM {$table}
@@ -142,6 +166,8 @@ final class BlockOwnership {
         $ip
       )
     );
+    self::assert_read_succeeded();
+    return (bool) $result;
   }
 
   /**
@@ -158,17 +184,18 @@ final class BlockOwnership {
 
     $table = $wpdb->prefix . self::TABLE;
 
-    return array_values(array_filter(array_map(
-      'strval',
-      $wpdb->get_col(
-        $wpdb->prepare(
-          "SELECT ip
-           FROM {$table}
-           WHERE owner = %s",
-          $owner
-        )
-      )
-    )));
+    $ips = $wpdb->get_col($wpdb->prepare(
+      "SELECT ip FROM {$table} WHERE owner = %s", $owner
+    ));
+    self::assert_read_succeeded();
+    return array_values(array_filter(array_map('strval', $ips)));
+  }
+
+  private static function assert_read_succeeded(): void {
+    global $wpdb;
+    if (($wpdb->last_error ?? '') !== '') {
+      throw new \RuntimeException('Grey Rock could not read complete ownership state.');
+    }
   }
 
   private static function is_valid_owner(string $owner): bool {

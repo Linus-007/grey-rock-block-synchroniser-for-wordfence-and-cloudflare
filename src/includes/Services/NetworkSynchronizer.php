@@ -30,7 +30,7 @@ final class NetworkSynchronizer {
 
     $inheriting_site_ids = [];
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {
@@ -96,9 +96,14 @@ final class NetworkSynchronizer {
       && $summary['disabled'] === 0
       && empty($summary['failed'])
     ) {
-      $summary['reconciliation'] = self::reconcile_network(
-        $inheriting_site_ids
-      );
+      try {
+        $summary['reconciliation'] = self::reconcile_network($inheriting_site_ids);
+      } catch (\RuntimeException) {
+        $summary['reconciliation'] = [
+          'complete' => false, 'purged' => [],
+          'error' => __('Network reconciliation stopped because complete local ownership/state could not be read.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+        ];
+      }
     }
 
     return $summary;

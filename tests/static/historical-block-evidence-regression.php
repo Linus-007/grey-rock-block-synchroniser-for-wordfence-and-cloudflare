@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
 $now = time();
@@ -173,7 +174,7 @@ $wpdb->rows = [
   [
     'ip_hex' => wf_ip_hex($ip),
     'event_time' => $now - 20,
-    'event_url' => 'https://salus.zone/real-attack',
+    'event_url' => 'https://sync.greyscale.zone/real-attack',
   ],
   [
     'ip_hex' => wf_ip_hex($second_ip),
@@ -184,15 +185,15 @@ $wpdb->rows = [
 
 $greyscale = \WPCF\FirewallSync\Services\HistoricalBlockReader::
   get_candidates(24, 1, ['greyscale.zone']);
-$altus = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 1, ['altus.salus.zone']);
-$salus = \WPCF\FirewallSync\Services\HistoricalBlockReader::
-  get_candidates(24, 1, ['salus.zone']);
+$unrelated_site = \WPCF\FirewallSync\Services\HistoricalBlockReader::
+  get_candidates(24, 1, ['unrelated.example.org']);
+$sync_site = \WPCF\FirewallSync\Services\HistoricalBlockReader::
+  get_candidates(24, 1, ['sync.greyscale.zone']);
 
 maintenance_assert(count($greyscale) === 2, 'Greyscale attribution failed.');
-maintenance_assert($altus === [], 'Evidence leaked to altus.salus.zone.');
+maintenance_assert($unrelated_site === [], 'Evidence leaked to an unrelated site.');
 maintenance_assert(
-  count($salus) === 1 && $salus[0]['event_count'] === 1,
+  count($sync_site) === 1 && $sync_site[0]['event_count'] === 1,
   'A genuine second-site attack was not independently attributable.'
 );
 maintenance_assert(

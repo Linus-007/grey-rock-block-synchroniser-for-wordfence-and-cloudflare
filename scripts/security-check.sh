@@ -6,41 +6,14 @@ set -o pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORT_DIR="$REPO_ROOT/reports/security"
 PLUGIN_MAIN="$REPO_ROOT/src/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php"
-SEMGREP_BIN="$REPO_ROOT/.tools/semgrep/bin/semgrep"
-SEMGREP_PYTHON="$REPO_ROOT/.tools/semgrep/bin/python"
-
 cd "$REPO_ROOT" || exit 1
 
 mkdir -p "$REPORT_DIR"
 rm -f "$REPORT_DIR"/*
 
-if [[ "${RUN_SEMGREP:-1}" == "1" ]]; then
-        echo "===== SEMGREP UPDATE ====="
-
-        if [[ ! -x "$SEMGREP_PYTHON" ]]; then
-                echo "ERROR: Semgrep Python environment is missing: $SEMGREP_PYTHON" >&2
-                exit 1
-        fi
-
-        if ! "$SEMGREP_PYTHON" -m pip install \
-                --disable-pip-version-check \
-                --upgrade \
-                semgrep \
-                > "$REPORT_DIR/semgrep-upgrade.txt" 2>&1; then
-                cat "$REPORT_DIR/semgrep-upgrade.txt"
-                echo "ERROR: Semgrep could not be upgraded to the latest stable release." >&2
-                exit 1
-        fi
-
-        cat "$REPORT_DIR/semgrep-upgrade.txt"
-
-        if [[ ! -x "$SEMGREP_BIN" ]]; then
-                echo "ERROR: Semgrep is unavailable after upgrade: $SEMGREP_BIN" >&2
-                exit 1
-        fi
-
-        printf "Semgrep after upgrade: %s\n" "$("$SEMGREP_BIN" --version)"
-        echo
+if [[ "${RUN_SEMGREP:-1}" != "0" && "${RUN_SEMGREP:-1}" != "1" ]]; then
+    echo "ERROR: RUN_SEMGREP must be 0 or 1." >&2
+    exit 1
 fi
 
 status=0
@@ -66,12 +39,11 @@ cat "$REPORT_DIR/php-lint.txt"
 echo
 
 echo "===== COMPOSER SECURITY AUDIT ====="
-if composer audit --no-interaction --no-ansi \
-	> "$REPORT_DIR/composer-audit.txt" 2>&1; then
-	cat "$REPORT_DIR/composer-audit.txt"
+if python3 scripts/composer_audit.py > "$REPORT_DIR/composer-audit.txt" 2>&1; then
+    cat "$REPORT_DIR/composer-audit.txt"
 else
-	cat "$REPORT_DIR/composer-audit.txt"
-	status=1
+    cat "$REPORT_DIR/composer-audit.txt"
+    status=1
 fi
 echo
 
@@ -93,43 +65,21 @@ else
 fi
 echo
 
+echo "===== COMPOSER VALIDATION AND PLATFORM ====="
+if ! composer validate --strict --no-interaction --no-check-publish; then
+    status=1
+fi
+if ! composer check-platform-reqs --no-interaction; then
+    status=1
+fi
+
 if [[ "${RUN_SEMGREP:-1}" == "1" ]]; then
-	echo "===== SEMGREP SAST ====="
-
-	if [[ ! -x "$SEMGREP_BIN" ]]; then
-		echo "ERROR: Semgrep is not installed at $SEMGREP_BIN"
-		status=1
-	else
-		printf "Semgrep:    %s\n" "$("$SEMGREP_BIN" --version)"
-
-		if "$SEMGREP_BIN" scan \
-			--config auto \
-			--no-git-ignore \
-			--error \
-			--json \
-			--output "$REPORT_DIR/semgrep.json" \
-			src > "$REPORT_DIR/semgrep-console.txt" 2>&1; then
-			cat "$REPORT_DIR/semgrep-console.txt"
-		else
-			cat "$REPORT_DIR/semgrep-console.txt"
-			status=1
-		fi
-
-		if [[ -s "$REPORT_DIR/semgrep.json" ]]; then
-			python3 - "$REPORT_DIR/semgrep.json" <<'PYTHON'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    report = json.load(handle)
-
-print(f"Semgrep findings: {len(report.get('results', []))}")
-print(f"Semgrep errors:   {len(report.get('errors', []))}")
-PYTHON
-		fi
-	fi
-
-	echo
+    echo "===== SEMGREP CE ====="
+    if ! ./scripts/semgrep-check.sh; then
+        status=1
+    fi
+else
+    echo "SEMGREP=SKIPPED (separate mandatory workflow job; this script is a partial check)"
 fi
 
 echo "===== RELEASE PACKAGE VALIDATION ====="
@@ -158,9 +108,9 @@ find "$REPORT_DIR" -maxdepth 1 -type f -printf '%f  %s bytes\n' | sort
 
 echo
 if [[ "$status" -eq 0 ]]; then
-	echo "SECURITY TEST RESULT: PASS"
+	echo "PHP SECURITY CHECK RESULT: PASS"
 else
-	echo "SECURITY TEST RESULT: FAIL"
+	echo "PHP SECURITY CHECK RESULT: FAIL"
 fi
 
 exit "$status"

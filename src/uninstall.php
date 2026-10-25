@@ -53,7 +53,7 @@ function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_sit
 }
 
 if (is_multisite()) {
-  foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+  foreach (get_sites(['fields' => 'ids', 'number' => 0]) as $blog_id) {
     switch_to_blog((int) $blog_id);
 
     try {
@@ -63,11 +63,27 @@ if (is_multisite()) {
     }
   }
 
-  delete_site_option('firewall_sync_network_options');
-  delete_site_option('firewall_sync_network_version');
-  delete_site_option('firewall_sync_network_ddns_state');
-  delete_site_option('firewall_sync_network_reset_watermarks');
-  delete_site_option('firewall_sync_network_manual_ownership');
+  // Physical plugin removal affects every network, unlike a network-scoped
+  // administration action. Do not leave another network's credentials behind.
+  foreach (get_networks(['fields' => 'ids', 'number' => 0]) as $network_id) {
+    foreach ([
+      'firewall_sync_network_options',
+      'firewall_sync_network_version',
+      'firewall_sync_network_ddns_state',
+      'firewall_sync_network_reset_watermarks',
+      'firewall_sync_network_manual_ownership',
+    ] as $option) {
+      delete_network_option((int) $network_id, $option);
+    }
+    // State mutexes contain no receipts; remove only this network's exact keys.
+    // As with table removal, uninstall requires drained synchronization workers.
+    foreach (['firewall_sync_network_reset_watermarks', 'firewall_sync_network_manual_ownership'] as $state_key) {
+      $sentinel = 'firewall_sync_state_' . hash('sha256', (int) $network_id . ':' . $state_key);
+      $table = $wpdb->base_prefix . 'options';
+      $wpdb->query($wpdb->prepare("DELETE FROM {$table} WHERE option_name = %s", $sentinel));
+    }
+
+  }
 } else {
   grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
 }

@@ -6,7 +6,7 @@ namespace WPCF\FirewallSync\Services;
 
 /*
  * Direct database access is intentional for synchronization-state queries
- * against the plugin's own operational log table. These values must remain
+ * against the plugin's operational log and lease options. These values must remain
  * current and therefore are not object-cached.
  *
  * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
@@ -31,6 +31,8 @@ final class SyncScheduler {
   private const LOCK_TTL_SECONDS = 900;
 
   private static string $lockOwnerToken = '';
+  private static string $lockTable = '';
+  private static bool $leaseLost = false;
   private const LAST_ATTEMPT_OPTION =
     'firewall_sync_last_attempt_timestamp';
 
@@ -226,17 +228,17 @@ final class SyncScheduler {
       return false;
     }
 
-    update_option(
-      self::LAST_ATTEMPT_OPTION,
-      time(),
-      false
-    );
-
     try {
+      self::assert_active_lease();
+      AtomicFence::run(static fn () => AtomicFence::option(self::LAST_ATTEMPT_OPTION, false, true, time()), [], true);
       $success = self::execute_sync();
       self::persist_last_result($success);
 
       return $success;
+    } catch (\Throwable) {
+      self::$lastErrorMessage = __('Synchronization stopped after an unexpected dependency failure. Retry after checking service and database health.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+      self::persist_failure_if_owned();
+      return false;
     } finally {
       self::release_lock();
     }
@@ -255,151 +257,192 @@ final class SyncScheduler {
   }
 
   private static function persist_last_result(bool $success): void {
-    update_option(
-      self::LAST_RESULT_OPTION,
-      $success ? self::RESULT_SUCCESS : self::RESULT_FAILURE,
-      false
+    if (!AtomicFence::active()) {
+      AtomicFence::run(static fn () => self::persist_last_result($success), [], true);
+      return;
+    }
+
+    self::assert_active_lease();
+    AtomicFence::option(
+      self::LAST_RESULT_OPTION, false, true,
+      $success ? self::RESULT_SUCCESS : self::RESULT_FAILURE
     );
 
-    update_option(
-      self::LAST_ERROR_OPTION,
-      $success ? '' : self::$lastErrorMessage,
-      false
+    AtomicFence::option(
+      self::LAST_ERROR_OPTION, false, true,
+      $success ? '' : self::$lastErrorMessage
     );
+  }
+
+  private static function persist_failure_if_owned(): void {
+    if (self::$leaseLost) { return; }
+    try { self::persist_last_result(false); } catch (\Throwable) {
+      // Do not overwrite a replacement worker's result or hide the failure
+      // behind a second dependency exception.
+    }
   }
 
   public static function is_locked(): bool {
-    $lock = self::normalize_lock(
-      get_option(self::LOCK_OPTION, null)
-    );
-
-    return (
-      $lock !== null
-      && !self::is_stale_lock($lock)
-    );
+    global $wpdb;
+    try {
+      $lock = self::normalize_lock(self::read_lock($wpdb->options));
+      return $lock !== null && !self::is_stale_lock($lock);
+    } catch (\Throwable) {
+      return true; // Unknown lease state must not enable an administrative action.
+    }
   }
 
   private static function acquire_lock(): bool {
+    try {
+      return self::try_acquire_lock();
+    } catch (\Throwable) {
+      self::$lastErrorMessage = __('Synchronization lease storage is unavailable. Retry later.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+      return false;
+    }
+  }
+
+  private static function try_acquire_lock(): bool {
     global $wpdb;
 
-    $started_at = time();
-    $owner_token = wp_generate_uuid4();
-
-    $new_lock = [
-      'owner' => $owner_token,
-      'started_at' => $started_at,
-    ];
-
-    if (
-      add_option(
-        self::LOCK_OPTION,
-        $new_lock,
-        '',
-        false
-      )
-    ) {
-      self::$lockOwnerToken = $owner_token;
-      return true;
-    }
-
-    $existing_raw = get_option(
-      self::LOCK_OPTION,
-      null
-    );
-
-    $existing_lock = self::normalize_lock($existing_raw);
-
-    if (
-      $existing_lock !== null
-      && !self::is_stale_lock($existing_lock)
-    ) {
+    // Do not replace a lease belonging to a nested invocation in this process.
+    if (self::$lockOwnerToken !== '') {
       self::set_already_running_error();
       return false;
     }
-
-    /*
-     * Replace the stale value only if it is still identical to the value
-     * read above. This prevents two processes from both taking ownership.
-     */
-    $updated = $wpdb->query(
-      $wpdb->prepare(
-        "UPDATE {$wpdb->options}
-         SET option_value = %s
-         WHERE option_name = %s
-           AND option_value = %s",
-        maybe_serialize($new_lock),
-        self::LOCK_OPTION,
-        maybe_serialize($existing_raw)
-      )
-    );
-
-    if ($updated === 1) {
-      wp_cache_delete(self::LOCK_OPTION, 'options');
-      self::$lockOwnerToken = $owner_token;
-      return true;
+    $new_lock = ['owner' => wp_generate_uuid4(), 'started_at' => self::lease_time()];
+    $table = $wpdb->options;
+    // add_option() is not a locking primitive: some supported core versions
+    // update the value on duplicate key. Use the options table's unique key
+    // without ever overwriting a concurrent insertion.
+    $inserted = $wpdb->query($wpdb->prepare(
+      "INSERT IGNORE INTO {$table} (option_name, option_value, autoload)
+       VALUES (%s, %s, 'no')",
+      self::LOCK_OPTION, maybe_serialize($new_lock)
+    ));
+    if ($inserted !== 1) {
+      if ($inserted === false) {
+        self::set_already_running_error();
+        return false;
+      }
+      $existing_raw = self::read_lock($table);
+      $existing_lock = self::normalize_lock($existing_raw);
+      if ($existing_raw === null || ($existing_lock !== null && !self::is_stale_lock($existing_lock))) {
+        self::set_already_running_error();
+        return false;
+      }
+      $updated = $wpdb->query($wpdb->prepare(
+        "UPDATE {$table} SET option_value = %s
+         WHERE option_name = %s AND BINARY option_value = BINARY %s",
+        maybe_serialize($new_lock), self::LOCK_OPTION, maybe_serialize($existing_raw)
+      ));
+      if ($updated !== 1) {
+        self::set_already_running_error();
+        return false;
+      }
     }
+    wp_cache_delete(self::LOCK_OPTION, 'options');
+    wp_cache_delete('notoptions', 'options');
+    self::$lockOwnerToken = $new_lock['owner'];
+    self::$lockTable = $table;
+    self::$leaseLost = false;
+    return true;
+  }
 
-    /*
-     * The option may have disappeared between the read and atomic update.
-     * One final add_option() remains atomic because option_name is unique.
-     */
-    if (
-      add_option(
-        self::LOCK_OPTION,
-        $new_lock,
-        '',
-        false
-      )
-    ) {
-      self::$lockOwnerToken = $owner_token;
-      return true;
+  private static function lease_time(): int {
+    global $wpdb;
+    $now = $wpdb->get_var('SELECT UNIX_TIMESTAMP()');
+    if (($wpdb->last_error ?? '') !== '' || !is_numeric($now) || (int) $now <= 0) {
+      throw new \RuntimeException('Synchronization lease clock is unavailable.');
     }
+    return (int) $now;
+  }
 
-    self::set_already_running_error();
-    return false;
+  /** Read authoritative storage, never a possibly stale object-cache entry. */
+  private static function read_lock(string $table) {
+    global $wpdb;
+    $raw = $wpdb->get_var($wpdb->prepare(
+      "SELECT option_value FROM {$table} WHERE option_name = %s",
+      self::LOCK_OPTION
+    ));
+    if (($wpdb->last_error ?? '') !== '') {
+      throw new \RuntimeException('Synchronization lease storage is unavailable.');
+    }
+    return $raw === null ? null : maybe_unserialize($raw);
+  }
+
+  /**
+   * Cooperative fence for an active scheduler invocation. An expired token
+   * cannot be renewed, even if no replacement worker has acquired it yet.
+   * This cannot revoke an HTTP request already dispatched to Cloudflare.
+   */
+  public static function fencing_leases(): array {
+    if (self::$lockOwnerToken === '') { return []; }
+    if (self::$leaseLost) { throw new \RuntimeException('Synchronization lease was lost.'); }
+    return [['table' => self::$lockTable, 'key' => self::LOCK_OPTION,
+      'owner' => self::$lockOwnerToken, 'ttl' => self::LOCK_TTL_SECONDS]];
+  }
+
+  public static function assert_active_lease(): void {
+    if (AtomicFence::locked()) { return; }
+
+    global $wpdb;
+    if (self::$lockOwnerToken === '') {
+      return; // Administrative workflows do not borrow a scheduler token.
+    }
+    if (self::$leaseLost) {
+      throw new \RuntimeException('Synchronization lease was lost.');
+    }
+    try {
+      $raw = self::read_lock(self::$lockTable);
+      $lock = self::normalize_lock($raw);
+      if ($lock === null || self::is_stale_lock($lock)
+        || !hash_equals($lock['owner'], self::$lockOwnerToken)) {
+        throw new \RuntimeException('Synchronization lease was lost.');
+      }
+      if (self::lease_time() - $lock['started_at'] >= intdiv(self::LOCK_TTL_SECONDS, 2)) {
+        $table = self::$lockTable;
+        $renewed = ['owner' => self::$lockOwnerToken, 'started_at' => self::lease_time()];
+        $updated = $wpdb->query($wpdb->prepare(
+          "UPDATE {$table} SET option_value = %s
+           WHERE option_name = %s AND BINARY option_value = BINARY %s
+             AND UNIX_TIMESTAMP() < %d",
+          maybe_serialize($renewed), self::LOCK_OPTION, maybe_serialize($raw),
+          $lock['started_at'] + self::LOCK_TTL_SECONDS
+        ));
+        if ($updated !== 1 || self::lease_time() >= $lock['started_at'] + self::LOCK_TTL_SECONDS) {
+          throw new \RuntimeException('Synchronization lease renewal failed.');
+        }
+        wp_cache_delete(self::LOCK_OPTION, 'options');
+      }
+    } catch (\Throwable $error) {
+      self::$leaseLost = true;
+      throw $error;
+    }
   }
 
   private static function release_lock(): void {
     global $wpdb;
-
     if (self::$lockOwnerToken === '') {
       return;
     }
-
-    $existing_raw = get_option(
-      self::LOCK_OPTION,
-      null
-    );
-
-    $existing_lock = self::normalize_lock($existing_raw);
-
-    if (
-      $existing_lock === null
-      || !hash_equals(
-        (string) ($existing_lock['owner'] ?? ''),
-        self::$lockOwnerToken
-      )
-    ) {
+    try {
+      $raw = self::read_lock(self::$lockTable);
+      $lock = self::normalize_lock($raw);
+      if ($lock !== null && hash_equals($lock['owner'], self::$lockOwnerToken)) {
+        $table = self::$lockTable;
+        $wpdb->query($wpdb->prepare(
+          "DELETE FROM {$table} WHERE option_name = %s AND BINARY option_value = BINARY %s",
+          self::LOCK_OPTION, maybe_serialize($raw)
+        ));
+        wp_cache_delete(self::LOCK_OPTION, 'options');
+      }
+    } catch (\Throwable) {
+      // Keep the row for expiration recovery when authoritative storage fails.
+    } finally {
       self::$lockOwnerToken = '';
-      return;
+      self::$lockTable = '';
+      self::$leaseLost = false;
     }
-
-    /*
-     * Delete only the exact lock value owned by this process. An older
-     * process therefore cannot delete a newer process's replacement lock.
-     */
-    $wpdb->query(
-      $wpdb->prepare(
-        "DELETE FROM {$wpdb->options}
-         WHERE option_name = %s
-           AND option_value = %s",
-        self::LOCK_OPTION,
-        maybe_serialize($existing_raw)
-      )
-    );
-
-    wp_cache_delete(self::LOCK_OPTION, 'options');
-    self::$lockOwnerToken = '';
   }
 
   /**
@@ -445,8 +488,8 @@ final class SyncScheduler {
   private static function is_stale_lock(array $lock): bool {
     return (
       $lock['started_at'] <= 0
-      || (time() - $lock['started_at'])
-        > self::LOCK_TTL_SECONDS
+      || (self::lease_time() - $lock['started_at'])
+        >= self::LOCK_TTL_SECONDS
     );
   }
 
@@ -497,6 +540,10 @@ final class SyncScheduler {
     }
 
     $client = new Client($token, $zone);
+    if (!$client->coordinate_destination($mode, $account_id)) {
+      self::$lastErrorMessage = $client->get_last_error_message();
+      return false;
+    }
     $list_id = '';
     $account_inventory = null;
 
@@ -808,6 +855,7 @@ final class SyncScheduler {
     }
 
     foreach (array_keys($wordfence_owned_ips) as $ip) {
+      self::assert_active_lease();
       if (
         !BlockOwnership::add(
           $ip,
@@ -863,13 +911,14 @@ final class SyncScheduler {
     }
 
     if ($mode !== 'account_list') {
-      $failed = self::record_batch_results($batch, $failed);
+      $failed = self::record_batch_results($batch, $failed, $client->get_retryable_failed_ips());
     }
 
-    update_option(
-      'firewall_sync_last_run',
+    self::assert_active_lease();
+    AtomicFence::run(static fn () => AtomicFence::option(
+      'firewall_sync_last_run', false, true,
       current_time('mysql')
-    );
+    ), [], true);
 
     if (!empty($failed)) {
       $client_error = $client->get_last_error_message();
@@ -898,7 +947,8 @@ final class SyncScheduler {
     ) {
       $post_inventory = $client->get_current_account_list_ips(
         $account_id,
-        $list_id
+        $list_id,
+        true
       );
 
       if ($post_inventory === null) {
@@ -985,14 +1035,16 @@ final class SyncScheduler {
       $batch
     );
 
-    return self::record_batch_results($batch, $failed);
+    return self::record_batch_results($batch, $failed, $client->get_retryable_failed_ips());
   }
 
   private static function record_batch_results(
     array $batch,
-    array $failed
+    array $failed,
+    array $retryable = []
   ): array {
     foreach ($batch as $entry) {
+      self::assert_active_lease();
       $record_local = !array_key_exists(
         'record_local',
         $entry
@@ -1006,7 +1058,8 @@ final class SyncScheduler {
           && !BlockLogger::mark_failed(
             $entry['ip'],
             $log_reason,
-            $entry['expires_at']
+            $entry['expires_at'],
+            !in_array($entry['ip'], $retryable, true)
           )
         ) {
           self::$lastErrorMessage = sprintf(
@@ -1079,6 +1132,7 @@ final class SyncScheduler {
     );
 
     foreach ($previous_ips as $ip) {
+      self::assert_active_lease();
       $ip = IpValidator::normalize_public_ip((string) $ip);
 
       if (
@@ -1087,6 +1141,10 @@ final class SyncScheduler {
       ) {
         continue;
       }
+
+      $shared_destination = is_multisite() && Config::uses_network_options();
+      $has_other_owner = !$shared_destination
+        && BlockOwnershipResolver::has_other_owner_after_wordfence_removal($ip);
 
       if (
         !BlockOwnership::remove(
@@ -1125,10 +1183,7 @@ final class SyncScheduler {
         continue;
       }
 
-      if (
-        BlockOwnershipResolver::
-          has_other_owner_after_wordfence_removal($ip)
-      ) {
+      if ($has_other_owner) {
         continue;
       }
 
@@ -1289,10 +1344,11 @@ final class SyncScheduler {
 
     $removed = true;
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {
+        if (!Config::uses_network_options()) { continue; }
         if (!BlockLogger::remove($ip)) {
           $removed = false;
         }
@@ -1313,8 +1369,6 @@ final class SyncScheduler {
   }
 
   public static function run_cleanup(): array {
-    global $wpdb;
-
     /*
      * A site inheriting Network Admin settings may share its Cloudflare
      * destination with other sites. Its local log cannot determine whether
@@ -1328,6 +1382,28 @@ final class SyncScheduler {
         __('Shared inherited cleanup is unavailable.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
       );
     }
+
+    if (!self::acquire_lock()) {
+      return self::cleanup_result(false, [], self::$lastErrorMessage);
+    }
+    try {
+      $result = self::execute_cleanup();
+      if (!$result['complete']) {
+        self::$lastErrorMessage = $result['error'];
+        self::persist_failure_if_owned();
+      }
+      return $result;
+    } catch (\Throwable) {
+      self::$lastErrorMessage = __('Cleanup stopped after an unexpected dependency failure. Local records were retained where cleanup was not confirmed.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+      self::persist_failure_if_owned();
+      return self::cleanup_result(false, [], self::$lastErrorMessage);
+    } finally {
+      self::release_lock();
+    }
+  }
+
+  private static function execute_cleanup(): array {
+    global $wpdb;
 
     $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
@@ -1353,6 +1429,9 @@ final class SyncScheduler {
     }
 
     $client = new Client($token, $zone);
+    if (!$client->coordinate_destination($mode, $account_id)) {
+      return self::cleanup_result(false, [], $client->get_last_error_message());
+    }
     $list_id = '';
 
     if ($mode === 'account_list') {
@@ -1375,71 +1454,87 @@ final class SyncScheduler {
     $removed_ips = [];
     $cleanup_error = '';
 
-    do {
-      $rows = $wpdb->get_results(
-        $wpdb->prepare(
-          "SELECT id, ip
-           FROM {$table}
-           WHERE id > %d
-             AND synced_at IS NOT NULL
-             AND fail_count = 0
-             AND expires_at IS NOT NULL
-             AND expires_at < %s
-           ORDER BY id ASC
-           LIMIT %d",
-          $last_id,
-          $current_time,
-          self::DELETE_BATCH_SIZE
-        ),
-        ARRAY_A
-      );
-
-      foreach ($rows as $row) {
-        $row_id = (int) ($row['id'] ?? 0);
-        $ip = IpValidator::normalize_public_ip(
-          (string) ($row['ip'] ?? '')
+    try {
+      do {
+        $rows = $wpdb->get_results(
+          $wpdb->prepare(
+            "SELECT id, ip
+             FROM {$table}
+             WHERE id > %d
+               AND synced_at IS NOT NULL
+               AND fail_count = 0
+               AND expires_at IS NOT NULL
+               AND expires_at < %s
+             ORDER BY id ASC
+             LIMIT %d",
+            $last_id,
+            $current_time,
+            self::DELETE_BATCH_SIZE
+          ),
+          ARRAY_A
         );
 
-        if ($row_id > $last_id) {
-          $last_id = $row_id;
+        if (!is_array($rows) || ($wpdb->last_error ?? '') !== '') {
+          $cleanup_error = __('Expired synchronization records could not be read completely. Cleanup was stopped.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+          break;
         }
 
-        if ($ip === null) {
-          continue;
+        foreach ($rows as $row) {
+          self::assert_active_lease();
+          $row_id = (int) ($row['id'] ?? 0);
+          $ip = IpValidator::normalize_public_ip(
+            (string) ($row['ip'] ?? '')
+          );
+
+          if ($row_id > $last_id) {
+            $last_id = $row_id;
+          }
+
+          if ($ip === null) {
+            continue;
+          }
+
+          // An expired Wordfence log must never expire independent manual ownership.
+          if (BlockOwnership::has($ip, BlockOwnership::OWNER_MANUAL)) {
+            continue;
+          }
+
+          $deleted = $mode === 'account_list'
+            ? $client->remove_ip_from_account_list(
+              $account_id,
+              $list_id,
+              $ip
+            )
+            : $client->delete_block($ip);
+
+          /*
+           * Retain the ownership record when deletion fails so a later cleanup
+           * can retry instead of losing track of the Cloudflare entry.
+           */
+          if (!$deleted) {
+            $cleanup_error = $client->get_last_error_message();
+            break 2;
+          }
+
+          $local_cleanup = self::finalize_expired_local_cleanup(
+            $table,
+            $row_id,
+            $ip,
+            time()
+          );
+
+          if (!$local_cleanup['complete']) {
+            $cleanup_error = (string) $local_cleanup['error'];
+            break 2;
+          }
+
+          $removed_ips[] = $ip;
         }
+      } while (count($rows) === self::DELETE_BATCH_SIZE);
+    } catch (\Throwable) {
+      $cleanup_error = __('Cleanup stopped after an unexpected dependency failure. Completed removals are listed; unconfirmed records were retained.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+    }
 
-        $deleted = $mode === 'account_list'
-          ? $client->remove_ip_from_account_list(
-            $account_id,
-            $list_id,
-            $ip
-          )
-          : $client->delete_block($ip);
-
-        /*
-         * Retain the ownership record when deletion fails so a later cleanup
-         * can retry instead of losing track of the Cloudflare entry.
-         */
-        if (!$deleted) {
-          $cleanup_error = $client->get_last_error_message();
-          break 2;
-        }
-
-        $local_cleanup = self::finalize_expired_local_cleanup(
-          $table,
-          $row_id,
-          $ip,
-          time()
-        );
-
-        if (!$local_cleanup['complete']) {
-          $cleanup_error = (string) $local_cleanup['error'];
-          break 2;
-        }
-
-        $removed_ips[] = $ip;
-      }
-    } while (count($rows) === self::DELETE_BATCH_SIZE);
 
     return self::cleanup_result(
       $cleanup_error === '',
@@ -1454,8 +1549,13 @@ final class SyncScheduler {
     string $ip,
     int $reset_at
   ): array {
+    if (!AtomicFence::active()) {
+      return AtomicFence::run(static fn () => self::finalize_expired_local_cleanup($table, $row_id, $ip, $reset_at), [$table]);
+    }
+
     global $wpdb;
 
+    self::assert_active_lease();
     if (!ResetWatermarkStore::set($ip, $reset_at)) {
       return self::cleanup_result(
         false,
@@ -1464,6 +1564,7 @@ final class SyncScheduler {
       );
     }
 
+    self::assert_active_lease();
     if ($wpdb->delete(
       $table,
       ['id' => $row_id],

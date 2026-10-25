@@ -1,0 +1,27 @@
+rules:
+  - id: grey-rock-request-code-execution
+    languages: [php]
+    severity: ERROR
+    message: Request data must not reach code execution or object deserialization.
+    mode: taint
+    pattern-sources:
+      - pattern: $_GET
+      - pattern: $_POST
+      - pattern: $_REQUEST
+      - pattern: $_COOKIE
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: shell_exec(...)
+      - pattern: system(...)
+      - pattern: passthru(...)
+      - pattern: unserialize(...)
+  - id: grey-rock-disabled-tls-verification
+    languages: [php]
+    severity: ERROR
+    message: Keep TLS certificate verification enabled.
+    pattern-either:
+      - pattern: wp_remote_request($URL, [..., 'sslverify' => false, ...])
+      - pattern: wp_remote_get($URL, [..., 'sslverify' => false, ...])
+      - pattern: wp_remote_post($URL, [..., 'sslverify' => false, ...])
+      - pattern: curl_setopt($HANDLE, CURLOPT_SSL_VERIFYPEER, false)

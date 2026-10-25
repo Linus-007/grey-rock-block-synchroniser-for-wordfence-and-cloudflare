@@ -266,7 +266,7 @@ final class Settings {
     $rows = [];
     $sites = [];
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {

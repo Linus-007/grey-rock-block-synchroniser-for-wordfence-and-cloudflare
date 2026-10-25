@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
 
@@ -229,6 +230,10 @@ function network_reconcile_response(
 function wp_remote_get(string $url, array $args): array {
   global $list_id, $cloudflare_items;
 
+  if (str_contains($url, '/bulk_operations/')) {
+    return network_reconcile_response(['id' => str_repeat('d', 32), 'status' => 'completed']);
+  }
+
   if (
     str_contains($url, '/rules/lists?')
   ) {
@@ -305,7 +310,7 @@ function wp_remote_request(string $url, array $args): array {
   $cloudflare_delete_ips[] = $matched_ip;
   unset($cloudflare_items[$matched_ip]);
 
-  return network_reconcile_response([]);
+  return network_reconcile_response(['operation_id' => str_repeat('d', 32)]);
 }
 
 final class NetworkReconcileDatabaseFake {

@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
 $cleanup_options = [];
@@ -169,22 +170,22 @@ cleanup_assert(
 $wpdb->rows = [[
   'ip_hex' => cleanup_wf_hex($ip),
   'event_time' => $cleanup_now - 30,
-  'event_url' => 'https://sweers.ch/old-episode',
+  'event_url' => 'https://greyscale.zone/old-episode',
 ]];
 cleanup_assert(
-  HistoricalBlockReader::get_candidates(24, 1, ['sweers.ch']) === [],
+  HistoricalBlockReader::get_candidates(24, 1, ['greyscale.zone']) === [],
   'Pre-cleanup historical evidence recreated the IP.'
 );
 
 $wpdb->rows[] = [
   'ip_hex' => cleanup_wf_hex($ip),
   'event_time' => $cleanup_now + 30,
-  'event_url' => 'https://sweers.ch/new-episode',
+  'event_url' => 'https://greyscale.zone/new-episode',
 ];
 $new_evidence = HistoricalBlockReader::get_candidates(
   24,
   1,
-  ['sweers.ch']
+  ['greyscale.zone']
 );
 cleanup_assert(
   count($new_evidence ?? []) === 1

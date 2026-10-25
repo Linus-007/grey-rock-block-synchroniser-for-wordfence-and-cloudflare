@@ -237,6 +237,20 @@ final class Fields {
       static function () use ($name, $placeholder): void {
         $options = Config::get_admin_options();
         $value = $options[$name] ?? '';
+        // Disabled password inputs still expose their values in the DOM.
+        // Network credentials belong only in the authorized network editor.
+        if (
+          $name === 'cloudflare_api_token'
+          && is_multisite()
+          && (is_network_admin() || Config::uses_network_options())
+          && (!is_network_admin() || !current_user_can('manage_network_options'))
+        ) {
+          $value = '';
+          $placeholder = __(
+            'Network token is private. Use a dedicated token for a site override.',
+            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+          );
+        }
         $type = $name === 'cloudflare_api_token' ? 'password' : 'text';
         $disabled = self::configuration_fields_disabled();
 
@@ -1114,7 +1128,7 @@ final class Fields {
     $watermark_set = false;
     $removed = true;
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {
@@ -1498,7 +1512,7 @@ final class Fields {
       return;
     }
 
-    foreach (get_sites(['fields' => 'ids']) as $blog_id) {
+    foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
       switch_to_blog((int) $blog_id);
 
       try {

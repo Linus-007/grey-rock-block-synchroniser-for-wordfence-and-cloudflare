@@ -30,6 +30,17 @@ final class ResetWatermarkStore {
   }
 
   public static function set(string $ip, int $timestamp): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::set($ip, $timestamp));
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     if (
@@ -61,6 +72,17 @@ final class ResetWatermarkStore {
   }
 
   public static function clear(string $ip): bool {
+    if (!AtomicFence::active()) {
+      global $wpdb;
+      return AtomicFence::run(static fn () => self::clear($ip));
+    }
+
+    if (class_exists(SyncScheduler::class)) {
+      SyncScheduler::assert_active_lease();
+    }
+    if (class_exists(DestinationLease::class)) {
+      DestinationLease::assert_held_leases();
+    }
     $ip = IpValidator::normalize_public_ip($ip) ?? '';
 
     if ($ip === '') {
@@ -82,9 +104,10 @@ final class ResetWatermarkStore {
    * @return array<string, int>
    */
   private static function read(?bool &$normalized_changed = null): array {
-    $raw = self::is_network_scope()
-      ? get_site_option(self::NETWORK_OPTION, [])
-      : get_option(self::SITE_OPTION, []);
+    $raw = AtomicFence::option(
+      self::is_network_scope() ? self::NETWORK_OPTION : self::SITE_OPTION,
+      self::is_network_scope()
+    );
 
     if (!is_array($raw)) {
       return [];
@@ -119,23 +142,11 @@ final class ResetWatermarkStore {
    * @param array<string, int> $watermarks
    */
   private static function write(array $watermarks): bool {
-    if (self::is_network_scope()) {
-      return update_site_option(self::NETWORK_OPTION, $watermarks);
-    }
-
-    if (get_option(self::SITE_OPTION, null) === null) {
-      return add_option(
-        self::SITE_OPTION,
-        $watermarks,
-        '',
-        false
-      );
-    }
-
-    return update_option(
-      self::SITE_OPTION,
-      $watermarks,
-      false
+    if (class_exists(SyncScheduler::class)) { SyncScheduler::assert_active_lease(); }
+    if (class_exists(DestinationLease::class)) { DestinationLease::assert_held_leases(); }
+    return AtomicFence::option(
+      self::is_network_scope() ? self::NETWORK_OPTION : self::SITE_OPTION,
+      self::is_network_scope(), true, $watermarks
     );
   }
 

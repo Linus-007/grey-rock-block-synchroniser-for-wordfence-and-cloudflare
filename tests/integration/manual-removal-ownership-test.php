@@ -27,6 +27,11 @@ function manual_removal_assert(
 }
 
 $test_ip = '176.31.182.86';
+// This fixture invokes post-HTTP leaf helpers directly; supply the destination
+// authority normally retained by the production Client. No HTTP is dispatched.
+$test_lease = new \WPCF\FirewallSync\Services\DestinationLease('integration:manual-removal');
+$test_lease->acquire();
+register_shutdown_function(static function () use ($test_lease): void { $test_lease->release(); });
 
 /*
  * Ensure the test begins from a known local state.

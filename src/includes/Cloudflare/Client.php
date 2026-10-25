@@ -11,6 +11,37 @@ use WPCF\FirewallSync\Services\IpValidator;
 use WPCF\FirewallSync\Plugin;
 
 final class Client {
+  private const RESULT_LIST_FLAG = '__grey_rock_result_is_list';
+  private const MAX_INVENTORY_PAGES = 10000;
+  private int $retryUntil = 0;
+  private array $retryableFailedIps = [];
+  private bool $pendingListOperation = false;
+  private array $destinationLeases = [];
+  private bool $resumingListOperation = false;
+
+  public function __destruct() {
+    foreach ($this->destinationLeases as $lease) { $lease->release(); }
+  }
+
+  /** Hold a destination before scheduler ownership reads/writes begin. */
+  public function coordinate_destination(string $mode, string $account_id = ''): bool {
+    if (!class_exists('WPCF\\FirewallSync\\Services\\DestinationLease')) { return true; }
+    $scope = $mode === 'account_list'
+      ? 'account:' . strtolower($account_id)
+      : 'zone:' . strtolower($this->zone);
+    try {
+      if (!isset($this->destinationLeases[$scope])) {
+        $lease = new \WPCF\FirewallSync\Services\DestinationLease($scope);
+        $lease->acquire();
+        $this->destinationLeases[$scope] = $lease;
+      }
+      $this->destinationLeases[$scope]->assert_live();
+      return true;
+    } catch (\RuntimeException $error) {
+      return $this->fail('coordinate_destination', $error->getMessage());
+    }
+  }
+
   private const MAX_RESPONSE_BYTES = 1048576;
   private const MAX_COMMENT_LENGTH = 200;
   private const HTTP_TIMEOUT_SECONDS = 30;
@@ -81,7 +112,7 @@ final class Client {
     }
 
     $url = $this->apiBase . "/zones/{$this->zone}";
-    $response = wp_remote_get($url, $this->get_request_args());
+    $response = $this->request('GET', $url, $this->get_request_args());
 
     return $this->response_succeeded(
       'validate_zone',
@@ -183,7 +214,7 @@ final class Client {
       $url = $this->apiBase
         . "/accounts/{$account_id}/rules/lists/{$legacy_list_id}";
 
-      $response = wp_remote_get($url, $this->get_request_args());
+      $response = $this->request('GET', $url, $this->get_request_args());
 
       $body = null;
 
@@ -251,7 +282,7 @@ final class Client {
         . "/accounts/{$account_id}/rules/lists"
         . "?page={$page}&per_page=50";
 
-      $response = wp_remote_get(
+      $response = $this->request('GET',
         $url,
         $this->get_request_args()
       );
@@ -497,6 +528,8 @@ final class Client {
     array $entries
   ): array {
     $failed = [];
+    $first_error = null;
+    $this->retryableFailedIps = [];
 
     if (!CloudflareIdentifierValidator::validate_account_id(
       $account_id
@@ -517,7 +550,9 @@ final class Client {
 
     if ($items === null) {
       foreach ($entries as $entry) {
-        $failed[] = (string) ($entry['ip'] ?? '');
+        $ip = (string) ($entry['ip'] ?? '');
+        $failed[] = $ip;
+        $this->remember_batch_failure($ip);
       }
 
       return $failed;
@@ -554,14 +589,17 @@ final class Client {
       );
 
       if (!$added) {
+        $this->remember_batch_failure($ip);
+        $first_error ??= $this->lastError;
         $failed[] = $ip;
         continue;
       }
 
       $items[$ip] = '';
-      $this->accountListItemCache[$cache_key][$ip] = '';
+      $this->accountListItemCache[$cache_key] = $items;
     }
 
+    if ($first_error !== null) { $this->lastError = $first_error; }
     return $failed;
   }
 
@@ -575,6 +613,9 @@ final class Client {
     string $list_id,
     string $ip
   ): bool {
+    if ($this->pendingListOperation) {
+      return $this->fail('remove_account_list_item', 'A previous list operation is still unresolved. Retry synchronization later.');
+    }
     if (
       !CloudflareIdentifierValidator::validate_account_id(
         $account_id
@@ -653,7 +694,7 @@ final class Client {
     $url = $this->apiBase
       . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
 
-    $response = wp_remote_request(
+    $response = $this->request('REQUEST',
       $url,
       $this->get_request_args(
         true,
@@ -672,10 +713,8 @@ final class Client {
       )
     );
 
-    $deleted = $this->response_succeeded(
-      'remove_account_list_item',
-      $response
-    );
+    $this->clear_account_list_cache($account_id, $list_id);
+    $deleted = $this->complete_list_operation($account_id, $response, 'remove_account_list_item');
 
     if ($deleted) {
       $cache_key = $this->account_list_cache_key(
@@ -694,8 +733,10 @@ final class Client {
    */
   public function get_current_account_list_ips(
     string $account_id,
-    string $list_id
+    string $list_id,
+    bool $refresh = false
   ): ?array {
+    if ($refresh) { $this->clear_account_list_cache($account_id, $list_id); }
     $items = $this->get_account_list_item_map(
       $account_id,
       $list_id
@@ -713,6 +754,9 @@ final class Client {
     string $ip,
     string $comment = ''
   ): bool {
+    if ($this->pendingListOperation) {
+      return $this->fail('add_account_list_item', 'A previous list operation is still unresolved. Retry synchronization later.');
+    }
     $url = $this->apiBase
       . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
 
@@ -723,7 +767,7 @@ final class Client {
       $item['comment'] = $comment;
     }
 
-    $response = wp_remote_post(
+    $response = $this->request('POST',
       $url,
       $this->get_request_args(
         true,
@@ -733,10 +777,9 @@ final class Client {
       )
     );
 
-    return $this->response_succeeded(
-      'add_account_list_item',
-      $response
-    );
+    $completed = $this->complete_list_operation($account_id, $response, 'add_account_list_item');
+    if (!$completed) { $this->clear_account_list_cache($account_id, $list_id); }
+    return $completed;
   }
 
   /**
@@ -750,97 +793,96 @@ final class Client {
     string $account_id,
     string $list_id
   ): ?array {
-    if (!CloudflareIdentifierValidator::validate_account_id(
-      $account_id
-    ) || !CloudflareIdentifierValidator::validate_list_id(
-      $list_id
-    )) {
+    if (!CloudflareIdentifierValidator::validate_account_id($account_id)
+      || !CloudflareIdentifierValidator::validate_list_id($list_id)) {
       return null;
     }
-
-    $cache_key = $this->account_list_cache_key(
-      $account_id,
-      $list_id
-    );
-
-    if (array_key_exists($cache_key, $this->accountListItemCache)) {
-      return $this->accountListItemCache[$cache_key];
+    $key = $this->account_list_cache_key($account_id, $list_id);
+    if (array_key_exists($key, $this->accountListItemCache)) {
+      if (!$this->coordinate_destination('account_list', $account_id)) { return null; }
+      $lease = $this->destinationLeases['account:' . strtolower($account_id)] ?? null;
+      if ($lease === null || $lease->pending() === '') {
+        return $this->accountListItemCache[$key];
+      }
+      unset($this->accountListItemCache[$key]);
     }
-
-    $items_by_ip = [];
-    $page = 1;
-
-    do {
-      $url = $this->apiBase
-        . "/accounts/{$account_id}/rules/lists/{$list_id}/items"
-        . "?page={$page}&per_page=50";
-
-      $response = wp_remote_get(
-        $url,
-        $this->get_request_args()
-      );
-
+    $items = [];
+    $ids = [];
+    $cursor = null;
+    $seen_cursors = [];
+    $pages = null;
+    for ($page = 1; $page <= self::MAX_INVENTORY_PAGES; $page++) {
+      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items?per_page=50";
+      $url .= $cursor !== null ? '&cursor=' . rawurlencode($cursor) : ($page > 1 ? '&page=' . $page : '');
+      $response = $this->request('GET', $url, $this->get_request_args());
       $body = null;
-
-      if (
-        !$this->response_succeeded(
-          'read_account_list',
-          $response,
-          [200],
-          $body
-        )
-      ) {
+      if (!$this->response_succeeded('read_account_list', $response, [200], $body)) {
         return null;
       }
-
-      $result = $this->response_result_array(
-        'read_account_list',
-        $body
-      );
-
-      if ($result === null) {
-        return null;
-      }
-
+      $result = $this->response_result_array('read_account_list', $body);
+      if ($result === null) { return null; }
       foreach ($result as $item) {
-        if (!is_array($item)) {
-          $this->fail(
-            'read_account_list',
-            __(
-              'Cloudflare returned an invalid account-list item.',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            )
-          );
-
+        if (!is_array($item) || !is_string($item['ip'] ?? null)
+          || !is_string($item['id'] ?? null) || $item['id'] === ''
+          || isset($ids[$item['id']])) {
+          $this->fail('read_account_list', 'Cloudflare returned an incomplete or conflicting list item.');
           return null;
         }
-        $ip = (string) ($item['ip'] ?? '');
-        $item_id = (string) ($item['id'] ?? '');
-        $ip = IpValidator::normalize_public_ip($ip) ?? '';
-
-        if (
-          $ip !== ''
-          && $item_id !== ''
-        ) {
-          $items_by_ip[$ip] = $item_id;
+        $ids[$item['id']] = true;
+        $ip = IpValidator::normalize_public_ip($item['ip']);
+        if ($ip === null) {
+          // Lists may legitimately contain private addresses and CIDR ranges.
+          $parts = explode('/', $item['ip']);
+          $packed = @inet_pton($parts[0]);
+          if ($packed !== false && (count($parts) === 1 || (count($parts) === 2
+            && ctype_digit($parts[1]) && (int) $parts[1] <= strlen($packed) * 8))) {
+            continue;
+          }
+          $this->fail('read_account_list', 'Cloudflare returned an invalid IP list item.');
+          return null;
         }
+        if (isset($items[$ip])) {
+          $this->fail('read_account_list', 'Cloudflare returned conflicting canonical IP entries.');
+          return null;
+        }
+        $items[$ip] = $item['id'];
       }
-
-      $total_pages = $this->response_total_pages(
-        'read_account_list',
-        $body
-      );
-
-      if ($total_pages === null) {
+      $info = $body['result_info'] ?? [];
+      if (is_array($info) && array_key_exists('cursors', $info)) {
+        if (!is_array($info['cursors'])) {
+          $this->fail('read_account_list', 'Cloudflare returned invalid cursor metadata.');
+          return null;
+        }
+        $next = $info['cursors']['after'] ?? null;
+        if ($next === null || $next === '') {
+          $this->accountListItemCache[$key] = $items;
+          return $items;
+        }
+        if (!is_string($next) || isset($seen_cursors[$next])) {
+          $this->fail('read_account_list', 'Cloudflare returned an invalid or repeated cursor.');
+          return null;
+        }
+        $seen_cursors[$next] = true;
+        $cursor = $next;
+        continue;
+      }
+      if ($cursor !== null) {
+        $this->fail('read_account_list', 'Cloudflare lost cursor pagination metadata.');
         return null;
       }
-
-      $page++;
-    } while ($page <= $total_pages);
-
-    $this->accountListItemCache[$cache_key] = $items_by_ip;
-
-    return $items_by_ip;
+      $total = $this->inventory_pages('read_account_list', $body, $page, count($result));
+      if ($total === null || ($pages !== null && $pages !== $total)) {
+        $this->fail('read_account_list', 'Cloudflare inventory pagination is incomplete or changed during reading.');
+        return null;
+      }
+      $pages = $total;
+      if ($page >= $pages) {
+        $this->accountListItemCache[$key] = $items;
+        return $items;
+      }
+    }
+    $this->fail('read_account_list', 'Cloudflare inventory exceeded the safe pagination limit.');
+    return null;
   }
 
   private function account_list_cache_key(
@@ -900,7 +942,7 @@ final class Client {
       'notes' => $notes,
     ];
 
-    $response = wp_remote_post(
+    $response = $this->request('POST',
       $url,
       $this->get_request_args(
         true,
@@ -910,93 +952,93 @@ final class Client {
       )
     );
 
-    return $this->response_succeeded(
-      'create_zone_access_rule',
-      $response
-    );
+    $body = null;
+    if ($this->response_succeeded('create_zone_access_rule', $response, null, $body)) {
+      if (!is_array($body['result'] ?? null) || !$this->valid_rule_id($body['result']['id'] ?? null)) {
+        return $this->fail('create_zone_access_rule', 'Cloudflare returned an incomplete rule creation result.');
+      }
+      return $this->confirm_zone_mutation();
+    }
+    if (!is_wp_error($response) && in_array(wp_remote_retrieve_response_code($response), [400, 409], true)) {
+      $original_error = $this->lastError;
+      $inventory = $this->get_current_blocked_ips($notes);
+      $canonical = IpValidator::normalize_public_ip($ip);
+      if ($inventory !== null && in_array($canonical, $inventory, true)) {
+        $this->clear_last_error();
+        return true;
+      }
+      if ($inventory !== null) { $this->lastError = $original_error; }
+    }
+    return false;
   }
 
   public function delete_block(string $ip): bool {
-    if (!IpValidator::validate_public_ip($ip)) {
-      return $this->fail(
-        'delete_zone_access_rule',
-        __('Invalid or non-public IP address.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
-      );
+    $ip = IpValidator::normalize_public_ip($ip) ?? '';
+    if ($ip === '' || $this->zone === '') {
+      return $this->fail('delete_zone_access_rule', 'A valid public IP and Cloudflare Zone ID are required.');
     }
-
-    if ($this->zone === '') {
-      return $this->fail(
-        'delete_zone_access_rule',
-        __('Cloudflare Zone ID is required.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
-      );
+    $ids = [];
+    $pages = null;
+    // Read and validate every page before deleting anything.
+    for ($page = 1; $page <= self::MAX_INVENTORY_PAGES; $page++) {
+      $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&configuration.target=ip&configuration.value="
+        . rawurlencode($ip) . "&page={$page}&per_page=50";
+      $response = $this->request('GET', $url, $this->get_request_args());
+      $body = null;
+      if (!$this->response_succeeded('find_zone_access_rule', $response, [200], $body)) { return false; }
+      $result = $this->response_result_array('find_zone_access_rule', $body);
+      if ($result === null) { return false; }
+      foreach ($result as $rule) {
+        if (!is_array($rule) || !is_array($rule['configuration'] ?? null)
+          || !is_string($rule['mode'] ?? null)) {
+          return $this->fail('find_zone_access_rule', 'Cloudflare returned an incomplete access rule.');
+        }
+        $configuration = $rule['configuration'];
+        if (($configuration['target'] ?? '') !== 'ip' || $rule['mode'] !== 'block') { continue; }
+        if (!is_string($configuration['value'] ?? null)) {
+          return $this->fail('find_zone_access_rule', 'Cloudflare returned a rule without its IP address.');
+        }
+        if (IpValidator::normalize_public_ip($configuration['value']) !== $ip) { continue; }
+        $id = $rule['id'] ?? '';
+        if (!is_string($id) || !$this->valid_rule_id($id)) {
+          return $this->fail('find_zone_access_rule', 'Cloudflare returned a matching rule without a valid ID.');
+        }
+        if (isset($ids[$id])) {
+          return $this->fail('find_zone_access_rule', 'Cloudflare repeated an access-rule ID while reading inventory.');
+        }
+        $ids[$id] = true;
+      }
+      $total = $this->inventory_pages('find_zone_access_rule', $body, $page, count($result));
+      if ($total === null || ($pages !== null && $total !== $pages)) {
+        return $this->fail('find_zone_access_rule', 'Cloudflare rule pagination is incomplete or changed during reading.');
+      }
+      $pages = $total;
+      if ($page >= $pages) { break; }
     }
-
-    $encoded_ip = rawurlencode($ip);
-
-    $list_url = $this->apiBase
-      . "/zones/{$this->zone}/firewall/access_rules/rules"
-      . "?mode=block"
-      . "&configuration.target=ip"
-      . "&configuration.value={$encoded_ip}";
-
-    $list = wp_remote_get(
-      $list_url,
-      $this->get_request_args()
-    );
-
-    $body = null;
-
-    if (
-      !$this->response_succeeded(
-        'find_zone_access_rule',
-        $list,
-        [200],
-        $body
-      )
-    ) {
-      return false;
+    foreach (array_keys($ids) as $id) {
+      $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules/" . rawurlencode($id);
+      $response = $this->request('REQUEST', $url, $this->get_request_args(true, ['method' => 'DELETE']));
+      $body = null;
+      if (!$this->response_succeeded('delete_zone_access_rule', $response, null, $body)) { return false; }
+      if (($body['result']['id'] ?? null) !== $id) {
+        return $this->fail('delete_zone_access_rule', 'Cloudflare returned an incomplete rule deletion result.');
+      }
+      if (!$this->confirm_zone_mutation()) { return false; }
     }
+    $this->clear_last_error();
+    return true;
+  }
 
-    $result = $this->response_result_array(
-      'find_zone_access_rule',
-      $body
-    );
+  /** IPs whose batch failure is transient rather than a permanent rejection. */
+  public function get_retryable_failed_ips(): array {
+    return array_keys($this->retryableFailedIps);
+  }
 
-    if ($result === null) {
-      return false;
+  private function remember_batch_failure(string $ip): void {
+    $code = $this->lastError['http_code'] ?? null;
+    if ($code === null || $code === 429 || $code >= 500 || $this->pendingListOperation) {
+      $this->retryableFailedIps[$ip] = true;
     }
-
-    $first_rule = $result[0] ?? null;
-    $rule_id = is_array($first_rule)
-      ? (string) ($first_rule['id'] ?? '')
-      : '';
-
-    /*
-     * The desired final state has already been reached.
-     */
-    if (!$rule_id) {
-      $this->clear_last_error();
-
-      return true;
-    }
-
-    $delete_url = $this->apiBase
-      . "/zones/{$this->zone}/firewall/access_rules/rules/{$rule_id}";
-
-    $response = wp_remote_request(
-      $delete_url,
-      $this->get_request_args(
-        true,
-        [
-          'method' => 'DELETE',
-        ]
-      )
-    );
-
-    return $this->response_succeeded(
-      'delete_zone_access_rule',
-      $response
-    );
   }
 
   public function clear_last_error(): void {
@@ -1135,6 +1177,12 @@ final class Client {
       return null;
     }
 
+    // Associative JSON decoding otherwise collapses {} and [] into the same
+    // PHP array, allowing a malformed object to masquerade as empty inventory.
+    $structure = json_decode($raw_body);
+    $body[self::RESULT_LIST_FLAG] = is_object($structure)
+      && is_array($structure->result ?? null);
+
     if (
       !array_key_exists('success', $body)
       || !is_bool($body['success'])
@@ -1202,6 +1250,8 @@ final class Client {
     if (
       !array_key_exists('result', $body)
       || !is_array($body['result'])
+      || !array_is_list($body['result'])
+      || !($body[self::RESULT_LIST_FLAG] ?? false)
     ) {
       $this->fail(
         $operation,
@@ -1261,7 +1311,7 @@ final class Client {
 
     $total_pages = (int) $total_pages;
 
-    if ($total_pages < 1) {
+    if ($total_pages < 1 || $total_pages > self::MAX_INVENTORY_PAGES) {
       $this->fail(
         $operation,
         __(
@@ -1405,6 +1455,212 @@ final class Client {
     );
   }
 
+  private function request(string $method, string $url, array $args) {
+    $lease = null;
+    $account = '';
+    $list_write = false;
+    $sync_write = false;
+    if (class_exists('WPCF\\FirewallSync\\Services\\DestinationLease')
+      && preg_match('~/((?:accounts|zones))/([a-fA-F0-9]{32})/~', $url, $match) === 1) {
+      $account = $match[1] === 'accounts' ? $match[2] : '';
+      if (!$this->coordinate_destination($account !== '' ? 'account_list' : 'zone_access_rules', $account)) {
+        return new \WP_Error('destination_busy', 'Cloudflare destination coordination is unavailable. Retry later.');
+      }
+      $scope = ($account !== '' ? 'account:' . strtolower($account) : 'zone:' . strtolower($this->zone));
+      $lease = $this->destinationLeases[$scope];
+      try {
+        $pending = $lease->pending();
+        if (!$this->resumingListOperation && $pending !== '' && !str_contains($url, '/bulk_operations/')) {
+          if ($pending === 'unknown') {
+            return new \WP_Error('destination_uncertain', 'An earlier Cloudflare mutation has unknown acceptance. Verify provider completion before repairing destination coordination.');
+          }
+          $this->resumingListOperation = true;
+          try {
+            $accepted = ['response' => ['code' => 200], 'body' => wp_json_encode(['success' => true, 'result' => ['operation_id' => $pending]])];
+            if (!$this->complete_list_operation($account, $accepted, 'resume_account_list_operation')) {
+              return new \WP_Error('destination_pending', 'An earlier Cloudflare list operation is unresolved. Retry later.');
+            }
+          } finally { $this->resumingListOperation = false; }
+          $this->accountListItemCache = [];
+        }
+        $list_write = $account !== '' && $method !== 'GET' && preg_match('~/rules/lists/[a-fA-F0-9]{32}/items(?:\\?|$)~', $url) === 1;
+        $sync_write = $method !== 'GET' && !$list_write;
+        $lease->assert_live();
+      } catch (\RuntimeException) {
+        return new \WP_Error('destination_lost', 'Cloudflare destination lease was lost. Retry later.');
+      }
+    }
+    $response = $this->transport_request($method, $url, $args, ($list_write || $sync_write) ? $lease : null);
+    if ($lease !== null) {
+      try {
+        if (($list_write || $sync_write) && !is_wp_error($response)) {
+          $raw_body = wp_remote_retrieve_body($response);
+          $body = strlen($raw_body) <= self::MAX_RESPONSE_BYTES ? json_decode($raw_body, true) : null;
+          $id = $body['result']['operation_id'] ?? null;
+          $valid_envelope = is_array($body)
+            && is_bool($body['success'] ?? null)
+            && (!array_key_exists('errors', $body) || is_array($body['errors']))
+            && (!array_key_exists('messages', $body) || is_array($body['messages']));
+          // A synchronous response is confirmed only by its caller after full
+          // envelope and operation-specific identity validation.
+          if ($list_write && $valid_envelope && $body['success'] === true
+            && is_string($id) && preg_match('/\\A[a-zA-Z0-9_-]{1,128}\\z/', $id) === 1) {
+            $lease->set_pending($id);
+          } elseif ($valid_envelope && $body['success'] === false
+            && in_array(wp_remote_retrieve_response_code($response), [400, 401, 403, 404, 409, 429], true)) {
+            $lease->set_pending(''); // Explicit rejection, not uncertain acceptance.
+          }
+        }
+        $lease->assert_live();
+      } catch (\RuntimeException) {
+        return new \WP_Error('destination_lost', 'Cloudflare response could not be recorded under a live destination lease. Retry later.');
+      }
+    }
+    return $response;
+  }
+
+  private function transport_request(string $method, string $url, array $args, $pending_lease = null) {
+    if (\WPCF\FirewallSync\Services\AtomicFence::active()) {
+      throw new \RuntimeException('HTTP cannot run inside a local fencing transaction.');
+    }
+    if (class_exists('WPCF\\FirewallSync\\Services\\SyncScheduler')) {
+      \WPCF\FirewallSync\Services\SyncScheduler::assert_active_lease();
+    }
+    $key = 'firewall_sync_cf_backoff_' . hash('sha256', $this->token);
+    $shared = function_exists('get_transient') ? (int) get_transient($key) : 0;
+    $this->retryUntil = max($this->retryUntil, $shared);
+    if ($this->retryUntil > time()) {
+      return new \WP_Error('cloudflare_backoff', sprintf('Cloudflare retry cooldown active; retry after %d seconds.', $this->retryUntil - time()));
+    }
+    if ($pending_lease !== null) { $pending_lease->set_pending('unknown'); }
+    if (class_exists('WPCF\\FirewallSync\\Services\\DestinationLease')) {
+      \WPCF\FirewallSync\Services\DestinationLease::assert_held_leases();
+    }
+    if (class_exists('WPCF\\FirewallSync\\Services\\SyncScheduler')) {
+      \WPCF\FirewallSync\Services\SyncScheduler::assert_active_lease();
+    }
+    $response = match ($method) {
+      'GET' => wp_remote_get($url, $args),
+      'POST' => wp_remote_post($url, $args),
+      default => wp_remote_request($url, $args),
+    };
+    if (class_exists('WPCF\\FirewallSync\\Services\\SyncScheduler')) {
+      \WPCF\FirewallSync\Services\SyncScheduler::assert_active_lease();
+    }
+    $http_code = is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response);
+    $header = !is_wp_error($response) && function_exists('wp_remote_retrieve_header')
+      ? wp_remote_retrieve_header($response, 'retry-after') : '';
+    if ($http_code === 429 || ($http_code === 503 && is_string($header) && $header !== '')) {
+      $delay = 60;
+      if (is_string($header) && ctype_digit($header)) {
+        $delay = max(1, (int) min((float) $header, 31536000));
+      } elseif (is_string($header) && ($date = strtotime($header)) !== false) {
+        $delay = max(1, min($date - time(), 31536000));
+      }
+      $this->retryUntil = time() + $delay;
+      if (function_exists('set_transient')) { set_transient($key, $this->retryUntil, $delay); }
+    }
+    return $response;
+  }
+
+  private function complete_list_operation(string $account_id, $response, string $operation): bool {
+    $body = null;
+    if (!$this->response_succeeded($operation, $response, null, $body)) {
+      if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 409) {
+        $this->pendingListOperation = true;
+      }
+      return false;
+    }
+    $this->pendingListOperation = true;
+    $id = $body['result']['operation_id'] ?? null;
+    if (!is_string($id) || preg_match('/\A[a-zA-Z0-9_-]{1,128}\z/', $id) !== 1) {
+      return $this->fail($operation, 'Cloudflare returned no valid asynchronous operation ID.');
+    }
+    $this->pendingListOperation = true;
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+      if ($attempt > 0) { usleep(250000); }
+      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/bulk_operations/" . rawurlencode($id);
+      $status_response = $this->request('GET', $url, $this->get_request_args());
+      $status_body = null;
+      if (!$this->response_succeeded($operation, $status_response, [200], $status_body)) { return false; }
+      $result = $status_body['result'] ?? null;
+      if (!is_array($result) || ($result['id'] ?? null) !== $id) {
+        return $this->fail($operation, 'Cloudflare returned an invalid asynchronous operation status.');
+      }
+      if (($result['status'] ?? '') === 'completed') {
+        $this->clear_durable_pending($account_id);
+        $this->pendingListOperation = false;
+        return true;
+      }
+      if (($result['status'] ?? '') === 'failed') {
+        $this->clear_durable_pending($account_id);
+        $this->pendingListOperation = false;
+        return $this->fail($operation, 'Cloudflare asynchronous list operation failed. Retry synchronization later.', 200);
+      }
+      if (!in_array($result['status'] ?? null, ['pending', 'running'], true)) {
+        return $this->fail($operation, 'Cloudflare returned an unknown asynchronous operation status.');
+      }
+    }
+    return $this->fail($operation, 'Cloudflare list operation is still pending. No local success was recorded; retry synchronization later.');
+  }
+
+  private function confirm_zone_mutation(): bool {
+    $lease = $this->destinationLeases['zone:' . strtolower($this->zone)] ?? null;
+    if ($lease === null) { return true; }
+    try { $lease->set_pending(''); return true; }
+    catch (\RuntimeException) {
+      return $this->fail('confirm_zone_mutation', 'Cloudflare completion could not be confirmed under a live destination lease.');
+    }
+  }
+
+  private function clear_durable_pending(string $account_id): void {
+    $lease = $this->destinationLeases['account:' . strtolower($account_id)] ?? null;
+    if ($lease !== null) { $lease->set_pending(''); }
+  }
+
+  private function valid_rule_id($value): bool {
+    return is_string($value) && preg_match('/\A[a-fA-F0-9]{32}\z/', $value) === 1;
+  }
+
+  private function inventory_pages(string $operation, array $body, int $page, int $count): ?int {
+    $info = $body['result_info'] ?? [];
+    if (!is_array($info)) {
+      $this->fail($operation, 'Cloudflare returned invalid pagination metadata.');
+      return null;
+    }
+    foreach (['page', 'per_page', 'count', 'total_count', 'total_pages'] as $field) {
+      if (!array_key_exists($field, $info)) { continue; }
+      $value = $info[$field];
+      if ((!is_int($value) && !(is_string($value) && ctype_digit($value) && strlen($value) <= 10))
+        || (int) $value < 0) {
+        $this->fail($operation, 'Cloudflare returned an invalid pagination count.');
+        return null;
+      }
+    }
+    if ((isset($info['page']) && (int) $info['page'] !== $page)
+      || (isset($info['count']) && (int) $info['count'] !== $count)
+      || (isset($info['per_page']) && ((int) $info['per_page'] < 1 || $count > (int) $info['per_page']))
+      || (isset($info['total_count']) && $count > (int) $info['total_count'])
+      || (isset($info['total_pages']) && $page > (int) $info['total_pages'])) {
+      $this->fail($operation, 'Cloudflare pagination does not match the returned page.');
+      return null;
+    }
+    if (isset($info['total_count'], $info['per_page'], $info['total_pages'])
+      && (int) $info['total_pages'] !== max(1, (int) ceil((int) $info['total_count'] / (int) $info['per_page']))) {
+      $this->fail($operation, 'Cloudflare pagination totals are inconsistent.');
+      return null;
+    }
+    if (!isset($info['total_pages']) && isset($info['total_count'], $info['per_page'])) {
+      $body['result_info']['total_pages'] = max(1, (int) ceil((int) $info['total_count'] / (int) $info['per_page']));
+    }
+    if (!isset($body['result_info']['total_pages'])
+      && ($count >= 50 || (isset($info['total_count']) && (int) $info['total_count'] > $count))) {
+      $this->fail($operation, 'Cloudflare inventory lacks proof of complete pagination.');
+      return null;
+    }
+    return $this->response_total_pages($operation, $body);
+  }
+
   private function get_headers(bool $with_content_type = false): array {
     $headers = [
       'Authorization' => 'Bearer ' . $this->token,
@@ -1470,106 +1726,66 @@ final class Client {
     return substr($comment, 0, self::MAX_COMMENT_LENGTH);
   }
 
-  public function get_current_blocked_ips(): ?array {
-    if (
-      !CloudflareIdentifierValidator::validate_zone_id(
-        $this->zone
-      )
-    ) {
-      $this->fail(
-        'read_zone_access_rules',
-        __(
-          'Cloudflare Zone ID must contain exactly 32 hexadecimal characters.',
-          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-        )
-      );
-
+  /** Optional exact notes restrict only duplicate-write recovery, not normal inventories. */
+  public function get_current_blocked_ips(?string $required_notes = null): ?array {
+    if (!CloudflareIdentifierValidator::validate_zone_id($this->zone)) {
+      $this->fail('read_zone_access_rules', 'Cloudflare Zone ID is invalid.');
       return null;
     }
-
-    $ip_list = [];
-    $page = 1;
-
-    do {
-      $url = $this->apiBase
-        . "/zones/{$this->zone}/firewall/access_rules/rules"
-        . "?mode=block&page={$page}&per_page=50";
-
-      $response = wp_remote_get(
-        $url,
-        $this->get_request_args()
-      );
-
+    $ips = [];
+    $seen_ids = [];
+    $pages = null;
+    for ($page = 1; $page <= self::MAX_INVENTORY_PAGES; $page++) {
+      $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules?mode=block&page={$page}&per_page=50";
+      $response = $this->request('GET', $url, $this->get_request_args());
       $body = null;
-
-      if (
-        !$this->response_succeeded(
-          'read_zone_access_rules',
-          $response,
-          [200],
-          $body
-        )
-      ) {
-        return null;
-      }
-
-      $result = $this->response_result_array(
-        'read_zone_access_rules',
-        $body
-      );
-
-      if ($result === null) {
-        return null;
-      }
-
+      if (!$this->response_succeeded('read_zone_access_rules', $response, [200], $body)) { return null; }
+      $result = $this->response_result_array('read_zone_access_rules', $body);
+      if ($result === null) { return null; }
       foreach ($result as $rule) {
-        if (!is_array($rule)) {
-          $this->fail(
-            'read_zone_access_rules',
-            __(
-              'Cloudflare returned an invalid access-rule item.',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            )
-          );
-
+        if (!is_array($rule) || !is_array($rule['configuration'] ?? null) || !is_string($rule['mode'] ?? null)) {
+          $this->fail('read_zone_access_rules', 'Cloudflare returned an incomplete access rule.');
           return null;
         }
-
-        $configuration = $rule['configuration'] ?? null;
-
-        if (
-          !is_array($configuration)
-          || (string) ($configuration['target'] ?? '') !== 'ip'
-        ) {
-          continue;
+        $config = $rule['configuration'];
+        if (($config['target'] ?? '') !== 'ip' || $rule['mode'] !== 'block') { continue; }
+        if (!is_string($config['value'] ?? null)) {
+          $this->fail('read_zone_access_rules', 'Cloudflare returned a rule without its IP address.');
+          return null;
         }
-
-        $ip = (string) ($configuration['value'] ?? '');
-
-        if (IpValidator::validate_public_ip($ip)) {
-          $ip_list[$ip] = true;
+        $id = $rule['id'] ?? null;
+        if (!$this->valid_rule_id($id) || isset($seen_ids[$id])) {
+          $this->fail('read_zone_access_rules', 'Cloudflare returned a missing or repeated access-rule ID.');
+          return null;
+        }
+        $seen_ids[$id] = true;
+        if ($required_notes !== null && ($rule['notes'] ?? null) !== $required_notes) { continue; }
+        $ip = IpValidator::normalize_public_ip($config['value']);
+        if ($ip !== null) { $ips[$ip] = true; }
+        elseif (@inet_pton($config['value']) === false) {
+          $this->fail('read_zone_access_rules', 'Cloudflare returned an invalid IP rule.');
+          return null;
         }
       }
-
-      $total_pages = $this->response_total_pages(
-        'read_zone_access_rules',
-        $body
-      );
-
-      if ($total_pages === null) {
+      $total = $this->inventory_pages('read_zone_access_rules', $body, $page, count($result));
+      if ($total === null || ($pages !== null && $total !== $pages)) {
+        $this->fail('read_zone_access_rules', 'Cloudflare rule pagination is incomplete or changed during reading.');
         return null;
       }
-
-      $page++;
-    } while ($page <= $total_pages);
-
-    $this->clear_last_error();
-
-    return array_keys($ip_list);
+      $pages = $total;
+      if ($page >= $pages) {
+        $this->clear_last_error();
+        return array_keys($ips);
+      }
+    }
+    $this->fail('read_zone_access_rules', 'Cloudflare inventory exceeded the safe pagination limit.');
+    return null;
   }
 
   public function batch_block(array $ips): array {
     $failed = [];
+    $first_error = null;
+    $this->retryableFailedIps = [];
 
     foreach ($ips as $entry) {
       $ip = $entry['ip'] ?? '';
@@ -1583,9 +1799,12 @@ final class Client {
 
       if (!$this->create_block($ip, $notes)) {
         $failed[] = $ip;
+        $this->remember_batch_failure($ip);
+        $first_error ??= $this->lastError;
       }
     }
 
+    if ($first_error !== null) { $this->lastError = $first_error; }
     return $failed;
   }
 }

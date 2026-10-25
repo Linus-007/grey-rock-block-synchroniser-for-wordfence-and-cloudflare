@@ -7,7 +7,7 @@ GIT_REMOTE ?= fork
 PHP ?= php
 PYTHON ?= python3
 
-.PHONY: help validate metadata-check version-check build release tag-release clean pot
+.PHONY: help validate metadata-check version-check build release release-readiness tag-release clean pot
 
 help:
 	@printf '%s\n' \
@@ -21,11 +21,36 @@ help:
 		'  make pot'
 
 validate:
+	@$(PYTHON) scripts/action_pins.py
+	@$(PYTHON) scripts/wordpress_policy.py --check-metadata
 	@echo "Validating PHP syntax..."
 	@find src -type f -name '*.php' -print0 | xargs -0 -n1 $(PHP) -l
+	@$(PYTHON) -m unittest discover -s tests/python -p 'test_*.py'
 	@echo "Validating release builder..."
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Running static regression checks..."
+	@$(PHP) tests/static/independent-worker-regression.php
+	@$(PHP) tests/static/independent-state-regression.php
+	@$(PHP) tests/static/independent-lock-regression.php
+	@$(PHP) tests/static/task06-lease-regression.php
+	@$(PHP) tests/static/task06-lock-acquisition-regression.php
+	@$(PHP) tests/static/task06-network-scope-regression.php
+	@$(PHP) tests/static/task07-adversarial-regression.php
+	@$(PHP) tests/static/task07-uninstall-scope-regression.php
+	@echo "Task 14 modeled safety follows; real MariaDB validation is a separate required gate."
+	@$(PHP) tests/static/task08-local-fencing-characterization.php --require-fenced
+	@$(PHP) tests/static/task06-destination-regression.php
+	@$(PHP) tests/static/task11-destination-prepare-regression.php
+	@$(PHP) tests/static/task06-destination-fault-regression.php
+	@$(PHP) tests/static/cloudflare-recovery-regression.php
+	@$(PHP) tests/static/synchronization-recovery-regression.php
+	@$(PHP) tests/static/large-network-ownership-regression.php
+	@$(PHP) tests/static/ownership-read-failure-regression.php
+	@$(PHP) tests/static/transient-sync-retry-regression.php
+	@$(PHP) tests/static/admin-authorization-security-regression.php
+	@$(PHP) tests/static/network-credential-security-regression.php
+	@$(PHP) tests/static/wordpress-compatibility-regression.php
+	@$(PHP) tests/static/wordpress-multisite-lifecycle-regression.php
 	@$(PHP) tests/static/log-ui-regression.php
 	@$(PHP) tests/static/action-feedback-regression.php
 	@$(PHP) tests/static/dns-allow-list-regression.php
@@ -57,6 +82,7 @@ validate:
 	@echo "Validation passed."
 
 metadata-check:
+	@$(PYTHON) scripts/wordpress_policy.py --check-metadata
 	@PLUGIN_VERSION="$$(sed -nE 's/^[[:space:]]*\*[[:space:]]Version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*$$/\1/p' "$(PLUGIN_ENTRY)" | head -n 1)"; \
 	STABLE_TAG="$$(sed -nE 's/^Stable tag:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*$$/\1/p' readme.txt | head -n 1)"; \
 	if [ -z "$${PLUGIN_VERSION}" ] || [ -z "$${STABLE_TAG}" ]; then \
@@ -95,7 +121,10 @@ build: validate metadata-check clean
 release: version-check build
 	@echo "Release ZIP: $(RELEASE_ZIP)"
 
-tag-release: release
+release-readiness:
+	@$(PYTHON) scripts/release_readiness.py
+
+tag-release: release-readiness release
 	@if ! git diff --quiet || ! git diff --cached --quiet; then \
 		echo "The working tree or staging area contains uncommitted changes."; \
 		exit 1; \
@@ -115,11 +144,14 @@ clean:
 
 pot:
 	@echo "Generating translation template with containerized WP-CLI..."
-	@sudo docker run --rm \
+	@set -e; \
+		session_file="$$(./scripts/resolve-test-session.sh)"; \
+		. "$$session_file"; \
+		sudo docker run --rm --pull=always \
 		--user "$$(id -u):$$(id -g)" \
 		-v "$$(pwd):/workspace" \
 		-w /workspace \
-		wordpress:cli-php8.5 \
+		"$$WPCLI_IMAGE" \
 		i18n make-pot \
 		src \
 		src/languages/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.pot \

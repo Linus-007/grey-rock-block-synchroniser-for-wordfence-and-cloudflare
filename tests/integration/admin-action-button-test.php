@@ -16,8 +16,7 @@ function greyrock_render_action_button(string $action, string $label, string $di
 
 function greyrock_assert(bool $condition, string $message): void {
     if (!$condition) {
-        fwrite(STDERR, 'FAIL: ' . $message . PHP_EOL);
-        exit(1);
+        throw new RuntimeException('FAIL: ' . $message);
     }
 }
 
@@ -80,7 +79,16 @@ $error_property->setValue(
     null,
     'Cloudflare test operation failed: restricted source address (HTTP 403)'
 );
-$persist_method->invoke(null, false);
+$acquire_method = new ReflectionMethod(SyncScheduler::class, 'try_acquire_lock');
+$release_method = new ReflectionMethod(SyncScheduler::class, 'release_lock');
+
+greyrock_assert(
+    $acquire_method->invoke(null) === true,
+    'Could not acquire disposable scheduler lease for persistence testing.'
+);
+
+try {
+    $persist_method->invoke(null, false);
 
 greyrock_assert(
     SyncScheduler::get_last_persisted_result()
@@ -94,7 +102,7 @@ greyrock_assert(
     'Failed synchronization error was not persisted.'
 );
 
-$persist_method->invoke(null, true);
+    $persist_method->invoke(null, true);
 
 greyrock_assert(
     SyncScheduler::get_last_persisted_result()
@@ -106,6 +114,10 @@ greyrock_assert(
     SyncScheduler::get_last_persisted_error() === '',
     'Successful synchronization did not clear the previous persisted error.'
 );
+
+} finally {
+    $release_method->invoke(null);
+}
 
 delete_option('firewall_sync_last_result');
 delete_option('firewall_sync_last_error');

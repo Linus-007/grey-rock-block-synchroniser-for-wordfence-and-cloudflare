@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
 

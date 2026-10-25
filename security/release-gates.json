@@ -1,0 +1,37 @@
+{
+  "atomic_fencing": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "real_innodb": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "phpcs": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "composer_audit": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "semgrep": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "gitleaks": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  },
+  "runtime_matrix": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No independently verified same-revision release-run evidence. Historical local results do not validate the current changed source."
+  }
+}

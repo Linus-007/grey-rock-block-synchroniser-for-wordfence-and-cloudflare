@@ -2,20 +2,19 @@
 
 set -Eeuo pipefail
 
-CACHE_DIR="${HOME}/.cache/grey-rock-tests"
+CACHE_DIR="${GREY_ROCK_TEST_CACHE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.tools/test-session}"
 SESSION_ENV="$CACHE_DIR/session.env"
-MODE="${1:-}"
 
 mkdir -p "$CACHE_DIR"
 
-if [[ -f "$SESSION_ENV" && "$MODE" != "--refresh" ]]; then
-    printf '%s\n' "$SESSION_ENV"
-    exit 0
-fi
-
-python3 - "$SESSION_ENV" <<'PYTHON'
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 - "$SESSION_ENV" "$REPO_ROOT/scripts/php-runtime.py" "$REPO_ROOT/scripts/wordpress_policy.py" <<'PYTHON'
 import json
+import importlib.util
+import os
 import pathlib
+import re
+import tempfile
 import sys
 import urllib.parse
 import urllib.request
@@ -33,41 +32,22 @@ def get_json(url):
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 
-php_payload = get_json("https://www.php.net/releases/?json&max=100")
-php_candidates = []
-
-for release in php_payload.values():
-    if not isinstance(release, dict):
-        continue
-    version = str(release.get("version", ""))
-    parts = version.split(".")
-    if len(parts) == 3 and all(part.isdigit() for part in parts):
-        php_candidates.append((tuple(map(int, parts)), version))
-
-if not php_candidates:
-    raise SystemExit("Could not resolve current stable PHP release.")
-
-php_version = max(php_candidates)[1]
+spec = importlib.util.spec_from_file_location("php_runtime", sys.argv[2])
+php_runtime = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(php_runtime)
+php_version = php_runtime.resolve()
+# Detect a release changing during a workflow instead of silently testing two targets.
+if os.environ.get("EXPECTED_PHP_VERSION"):
+    php_runtime.verify_runtime(php_version, os.environ["EXPECTED_PHP_VERSION"], exact=True)
 php_branch = ".".join(php_version.split(".")[:2])
 
 wordpress_payload = get_json(
     "https://api.wordpress.org/core/version-check/1.7/"
 )
-offers = wordpress_payload.get("offers", [])
-wordpress_version = ""
-
-for offer in offers:
-    candidate = str(offer.get("current", ""))
-    response = str(offer.get("response", ""))
-    if candidate and response in {"upgrade", "latest"}:
-        wordpress_version = candidate
-        break
-
-if not wordpress_version and offers:
-    wordpress_version = str(offers[0].get("current", ""))
-
-if not wordpress_version:
-    raise SystemExit("Could not resolve current stable WordPress release.")
+wp_spec = importlib.util.spec_from_file_location("wordpress_policy", sys.argv[3])
+wordpress_policy = importlib.util.module_from_spec(wp_spec)
+wp_spec.loader.exec_module(wordpress_policy)
+wordpress_version = wordpress_policy.latest_stable(wordpress_payload)
 
 plugin_query = urllib.parse.urlencode(
     {
@@ -91,6 +71,15 @@ wpcli_version = str(wpcli_payload.get("tag_name", "")).lstrip("v")
 if not wpcli_version:
     raise SystemExit("Could not resolve current stable WP-CLI release.")
 
+# Values are later sourced by Bash, so accept only stable numeric versions.
+for name, version in [
+    ("WordPress", wordpress_version),
+    ("Wordfence", wordfence_version),
+    ("WP-CLI", wpcli_version),
+]:
+    if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version, flags=re.ASCII):
+        raise SystemExit(f"Invalid stable {name} version in release response.")
+
 lines = [
     f"EXPECTED_WORDPRESS_VERSION={wordpress_version}",
     f"EXPECTED_PHP_VERSION={php_version}",
@@ -102,10 +91,20 @@ lines = [
     "MARIADB_IMAGE=mariadb:latest",
 ]
 
-temporary = destination.with_suffix(".tmp")
-temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
-temporary.chmod(0o600)
-temporary.replace(destination)
+# A unique mode-0600 temporary file avoids concurrent-writer collisions and
+# following an existing session.tmp symlink. Replace only a complete session.
+with tempfile.NamedTemporaryFile(
+    mode="w", encoding="utf-8", dir=destination.parent,
+    prefix="session-", suffix=".tmp", delete=False,
+) as handle:
+    temporary = pathlib.Path(handle.name)
+    try:
+        handle.write("\n".join(lines) + "\n")
+        handle.flush()
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
 PYTHON
 
 printf '%s\n' "$SESSION_ENV"

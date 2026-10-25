@@ -6,6 +6,9 @@ import argparse
 import sys
 import zipfile
 from pathlib import Path
+from wordpress_policy import validate_metadata
+from release_artifact import snapshot, read_bounded
+import re
 
 
 DEFAULT_PLUGIN_SLUG = "grey-rock-block-synchroniser-for-wordfence-and-cloudflare"
@@ -82,6 +85,17 @@ def build_zip(
             f"Invalid plugin slug: {plugin_slug}"
         )
 
+    if any(path.is_symlink() for path in source.rglob("*")):
+        raise RuntimeError("Source symlinks are forbidden in release artifacts.")
+
+    try:
+        validate_metadata(
+            (source / f"{DEFAULT_PLUGIN_SLUG}.php").read_text(encoding="utf-8"),
+            readme.read_text(encoding="utf-8"),
+        )
+    except (ValueError, OSError) as error:
+        raise RuntimeError(f"Invalid WordPress compatibility metadata: {error}") from error
+
     output.parent.mkdir(parents=True, exist_ok=True)
 
     if output.exists():
@@ -153,12 +167,30 @@ def verify_zip(
                     f"{required_file}"
                 )
 
+        try:
+            validate_metadata(
+                archive.read(f"{plugin_slug}/{DEFAULT_PLUGIN_SLUG}.php").decode("utf-8"),
+                archive.read(f"{plugin_slug}/readme.txt").decode("utf-8"),
+            )
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError(f"Invalid packaged WordPress metadata: {error}") from error
+
         for name in names:
             if not name.startswith(f"{plugin_slug}/"):
                 raise RuntimeError(
                     "Unexpected ZIP entry outside plugin directory: "
                     f"{name}"
                 )
+
+    try:
+        with zipfile.ZipFile(output) as archive:
+            header = archive.read(f"{plugin_slug}/{DEFAULT_PLUGIN_SLUG}.php").decode("utf-8")
+        match = re.search(r"^\s*\* Version:\s*(\S+)", header, re.M)
+        if match is None:
+            raise ValueError("Missing package version")
+        snapshot(read_bounded(output), match[1], plugin_slug)
+    except (ValueError, KeyError, UnicodeError) as error:
+        raise RuntimeError("Unsafe or inconsistent complete ZIP contents") from error
 
 
 def print_contents(output: Path) -> None:

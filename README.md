@@ -54,12 +54,16 @@ Use this mode when several domains or Cloudflare zones should share the same lis
 
 ## Compatibility
 
-- Requires WordPress 6.0 or later.
+- Requires stable WordPress 7.0 or later.
 - Tested with WordPress 7.1.
 - Requires PHP 8.1 or later.
 - Supports only the current Wordfence release.
-- At the time of this compatibility update, the supported Wordfence release is 9.0.0.
+- The compatibility target is the stable Wordfence release resolved from WordPress.org at validation time; check the recorded installed version and block API probe results.
 - Older Wordfence releases are not supported.
+
+Future stable WordPress major releases are eligible without a 7.x maximum, subject to compatibility validation. Alpha, beta, RC and development builds are not automatically supported. WordPress core checks the minimum during site and network activation; Grey Rock adds a stable-release activation check and disables initialization on unsupported active installations after a core downgrade. Deactivation remains available.
+
+Disposable integration and release checks resolve the latest stable WordPress release and verify the actual installed version. `Tested up to` records the existing compatibility target, not an upper support limit or a claim that this working tree has passed live integration.
 
 ## Requirements
 
@@ -115,6 +119,7 @@ grey-rock-block-synchroniser-for-wordfence-and-cloudflare/
 When the plugin is network activated:
 
 - **Network Admin** manages the shared Cloudflare configuration, scheduling method and synchronization interval.
+- Network API tokens stay private to Network Admin. A new site-specific override requires its own token; it does not copy the network token.
 - **Synchronise Network Now** processes every site that inherits the Network Admin configuration.
 - `sync-network --due` and `sync-network --force` process only sites that inherit the Network Admin configuration.
 - Sites using independent site-specific settings are excluded from network synchronization and continue to use their own controls.
@@ -1196,3 +1201,38 @@ GPLv2.
 ## Disclaimer
 
 This software is supplied without warranty. Test it in a non-production environment before relying on it for production security controls.
+
+## Security support policy
+
+PHP 8.1 is the technical minimum, but is EOL and excluded from security
+support. Security support requires the latest stable patch of an upstream
+security-maintained, reviewed branch with no known unresolved applicable
+vulnerability. The reviewed 2026-10-24 policy covers PHP 8.2–8.5 and requires
+review by 2026-12-31; CI resolves and checks every branch, including exact PHP
+patches in WordPress and WP-CLI. Configured CI coverage is not completed testing.
+WordPress 7.0 is the technical minimum; security support targets current stable
+WordPress with security fixes and current stable Wordfence, verified at test time.
+Older and future versions are not automatically certified by minimum metadata.
+
+Atomic local fencing requires InnoDB lease and protected-state tables on the
+same transactional connection. Protected transactions serialize against lease
+replacement using InnoDB row locks. Strict commit-before-lease-expiration is not
+guaranteed. External Cloudflare HTTP operations are not atomically rolled back
+with local transactions. Cloudflare compatibility assumes the documented v4 API;
+plans, permissions, limits and API changes can affect behavior.
+
+Optional layers, not mandatory plugin dependencies: Cloudflare Zero Trust Access
+and MFA for administration (test AJAX, REST, WP-CLI and authentication flows),
+Tunnel to reduce origin exposure, One/WARP for authorized administrators, WAF,
+secure TLS and Wordfence. Prefer free tiers where suitable.
+
+See [the support and evidence policy](docs/task15-security-support.md) for lifecycle sources, coverage and release limitations.
+
+As of the 2026-10-24 advisory review, no resolved PHP patch is certified for
+security support here. The October 21 fixes address CVE-2026-109618 and
+CVE-2026-109619, but the October 23 notice describes CVE-2026-115560 pending a
+regular release. Patches through 8.2.35, 8.3.36, 8.4.27 and 8.5.12 are excluded
+by this policy; future versions still require advisory clearance before release.
+The matrix covers maintained candidate branches; current known-affected
+candidates fail closed. No configuration mitigation is treated as a fixed
+version. See https://www.php.net/archive/2026.php for the upstream notices.

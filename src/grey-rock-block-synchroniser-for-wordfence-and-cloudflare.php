@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare
  * Description: Synchronises current and historical Wordfence firewall blocks with Cloudflare Zone Access Rules or an account-level IP list.
  * Version: 1.3.10
- * Requires at least: 6.0
+ * Requires at least: 7.0
  * Tested up to: 7.1
  * Requires PHP: 8.1
  * Author: Greyscale Zone
@@ -36,10 +36,29 @@ spl_autoload_register(function (string $class): void {
 });
 
 add_action('plugins_loaded', static function (): void {
+  // Active plugins also load after a core downgrade; activation metadata cannot
+  // protect that path. Do not initialize migrations, cron, admin actions or CLI.
+  if (!\WPCF\FirewallSync\WordPressCompatibility::is_supported(get_bloginfo('version'))) {
+    add_action('admin_notices', ['WPCF\\FirewallSync\\WordPressCompatibility', 'notice']);
+    add_action('network_admin_notices', ['WPCF\\FirewallSync\\WordPressCompatibility', 'notice']);
+    return;
+  }
+
   if (class_exists('WPCF\\FirewallSync\\Plugin')) {
     \WPCF\FirewallSync\Plugin::init();
   }
 });
 
-register_activation_hook(__FILE__, ['WPCF\\FirewallSync\\Plugin', 'activate']);
+register_activation_hook(__FILE__, static function (bool $network_wide = false): void {
+  // Core checks Requires at least. Only add the stable-release constraint that
+  // core deliberately does not enforce when comparing prerelease versions.
+  if (!\WPCF\FirewallSync\WordPressCompatibility::is_stable(get_bloginfo('version'))) {
+    wp_die(esc_html__(
+      'Grey Rock requires a stable WordPress release, version 7.0 or later.',
+      'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+    ));
+    return;
+  }
+  \WPCF\FirewallSync\Plugin::activate($network_wide);
+});
 register_deactivation_hook(__FILE__, ['WPCF\\FirewallSync\\Plugin', 'deactivate']);

@@ -1,7 +1,7 @@
 === Grey Rock Block Synchroniser for Wordfence and Cloudflare ===
 Contributors: greyscalezone
 Tags: wordfence, cloudflare, firewall, security, multisite
-Requires at least: 6.0
+Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.1
 Stable tag: 1.3.10
@@ -191,11 +191,17 @@ The plugin provides:
 * Synchronisation logs.
 * Cleanup and reconciliation where Cloudflare-entry ownership is isolated to one site.
 
+= WordPress compatibility =
+
+Requires a stable WordPress 7.0 or later release. There is no WordPress 7.x maximum; future stable major releases are eligible, subject to compatibility validation. Alpha, beta, release-candidate and development builds are not supported automatically.
+
+WordPress enforces the minimum during site and network activation. Grey Rock additionally rejects prerelease activation and leaves synchronization disabled if an active installation is downgraded below the minimum or switched to a prerelease. Disposable integration and release validation resolve the latest stable WordPress release and require the actual installed version to match. The Tested up to value records a compatibility target, not a maximum version restriction or evidence that this working tree has passed live integration.
+
 = Wordfence compatibility =
 
 Grey Rock supports only the current Wordfence release. Older Wordfence releases are intentionally unsupported.
 
-At the time of this compatibility update, the supported Wordfence release is 9.0.0.
+The compatibility target is the stable Wordfence release resolved from WordPress.org at validation time; check the recorded installed version and block API probe results.
 
 Active IP blocks are read through `wfBlock::ipBlocks(true)`. Historical WAF events are read from the table returned by `wfDB::networkTable('wfHits')`, allowing Wordfence to resolve the correct network prefix and table-name case.
 
@@ -407,6 +413,8 @@ Synchronization fails and reports the compatibility problem. Grey Rock supports 
 
 
 = Does the plugin support WordPress multisite? =
+
+Network API tokens stay private to Network Admin. A new site-specific override requires its own token; it does not copy the network token.
 
 Yes. It supports shared Network Admin settings, optional site-specific overrides, network synchronisation for inheriting sites and a combined Network Admin synchronisation log.
 
@@ -665,7 +673,7 @@ disabled-by-default stale-local-record cleanup for Account IP List mode, and
 hardens fail-closed reconciliation and IP canonicalization.
 
 = 1.3.3 =
-Restores compatibility with the current Wordfence 9.0.0 block interface,
+Restores compatibility with the Wordfence 9.0.0 block interface,
 corrects Wordfence historical-table resolution and updates security testing
 dependencies. Grey Rock supports only the current Wordfence release.
 
@@ -685,3 +693,36 @@ Maintenance release correcting release automation, continuous integration, repos
 = 1.2.0 =
 
 Security-focused release that hardens synchronization locking, public-IP and Cloudflare credential validation, API response handling, HTTP transport and stored reason text.
+
+== Security support policy ==
+
+PHP 8.1 is the technical minimum, but is EOL and excluded from security
+support. Security support requires the latest stable patch of an upstream
+security-maintained, reviewed branch with no known unresolved applicable
+vulnerability. The reviewed 2026-10-24 policy covers PHP 8.2–8.5 and requires
+review by 2026-12-31; CI resolves and checks every branch, including exact PHP
+patches in WordPress and WP-CLI. Configured CI coverage is not completed testing.
+WordPress 7.0 is the technical minimum; security support targets current stable
+WordPress with security fixes and current stable Wordfence, verified at test time.
+Older and future versions are not automatically certified by minimum metadata.
+
+Atomic local fencing requires InnoDB lease and protected-state tables on the
+same transactional connection. Protected transactions serialize against lease
+replacement using InnoDB row locks. Strict commit-before-lease-expiration is not
+guaranteed. External Cloudflare HTTP operations are not atomically rolled back
+with local transactions. Cloudflare compatibility assumes the documented v4 API;
+plans, permissions, limits and API changes can affect behavior.
+
+Optional layers, not mandatory plugin dependencies: Cloudflare Zero Trust Access
+and MFA for administration (test AJAX, REST, WP-CLI and authentication flows),
+Tunnel to reduce origin exposure, One/WARP for authorized administrators, WAF,
+secure TLS and Wordfence. Prefer free tiers where suitable.
+
+As of the 2026-10-24 advisory review, no resolved PHP patch is certified for
+security support here. The October 21 fixes address CVE-2026-109618 and
+CVE-2026-109619, but the October 23 notice describes CVE-2026-115560 pending a
+regular release. Patches through 8.2.35, 8.3.36, 8.4.27 and 8.5.12 are excluded
+by this policy; future versions still require advisory clearance before release.
+The matrix covers maintained candidate branches; current known-affected
+candidates fail closed. No configuration mitigation is treated as a fixed
+version. See https://www.php.net/archive/2026.php for the upstream notices.

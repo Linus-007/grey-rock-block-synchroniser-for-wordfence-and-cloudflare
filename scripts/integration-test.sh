@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 
+set +x +v
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/tests/docker/compose.yml"
-PLUGIN_ZIP="$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip"
+PLUGIN_ZIP="${GREY_ROCK_VALIDATION_ZIP:-$REPO_ROOT/dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip}"
 REPORT_DIR="$REPO_ROOT/reports/integration"
 PROJECT_NAME="greyrock-plugin-test"
 TEST_URL="http://127.0.0.1:18080"
 TEST_PORT="18080"
 PLUGIN_SLUG="grey-rock-block-synchroniser-for-wordfence-and-cloudflare"
-CACHE_DIR="${HOME}/.cache/grey-rock-tests"
+CACHE_DIR="${GREY_ROCK_TEST_CACHE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.tools/test-session}"
 SESSION_ENV="$CACHE_DIR/session.env"
 SESSION_RESOLVER="$REPO_ROOT/scripts/resolve-test-session.sh"
 
@@ -27,14 +28,12 @@ test -f "$COMPOSE_FILE"
 test -f "$PLUGIN_ZIP"
 test -x "$SESSION_RESOLVER"
 
-if [[ ! -f "$SESSION_ENV" ]]; then
-    "$SESSION_RESOLVER" --refresh >/dev/null
-fi
+"$SESSION_RESOLVER" --refresh >/dev/null
 
 # shellcheck disable=SC1090
 source "$SESSION_ENV"
 
-for command_name in sudo docker curl openssl python3; do
+for command_name in sudo docker curl openssl python3 timeout; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "ERROR: Required command is unavailable: $command_name" >&2
         exit 1
@@ -62,22 +61,13 @@ PYTHON
 umask 077
 
 RUNTIME_ENV="$(mktemp "$REPO_ROOT/.tools/greyrock-test.XXXXXX.env")"
-TEST_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+# shellcheck source=scripts/integration-harness.sh
+source "$REPO_ROOT/scripts/integration-harness.sh"
 
-cat > "$RUNTIME_ENV" <<EOF
-TEST_DB_PASSWORD=$(openssl rand -hex 24)
-TEST_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
-PLUGIN_ZIP=$PLUGIN_ZIP
-INTEGRATION_TEST_FILE=$REPO_ROOT/tests/integration/admin-action-button-test.php
-WORDFENCE_PROBE_FILE=$REPO_ROOT/tests/integration/wordfence-block-api-probe.php
-OWNERSHIP_MIGRATION_TEST_FILE=$REPO_ROOT/tests/integration/ownership-migration-test.php
-MANUAL_REMOVAL_OWNERSHIP_TEST_FILE=$REPO_ROOT/tests/integration/manual-removal-ownership-test.php
-EOF
+ADMIN_PASSWORD_FILE=""
 
-cat "$SESSION_ENV" >> "$RUNTIME_ENV"
-
-COMPOSE=(
-    sudo docker compose
+COMPOSE_COMMAND=(
+    sudo -n docker compose
     --env-file "$RUNTIME_ENV"
     --project-name "$PROJECT_NAME"
     --file "$COMPOSE_FILE"
@@ -94,12 +84,19 @@ cleanup() {
         date --iso-8601=seconds
         "$REPO_ROOT/scripts/stop-test-environment.sh" "$RUNTIME_ENV"
         cleanup_result=$?
-        rm -f "$RUNTIME_ENV"
+        rm -f "$RUNTIME_ENV" "$ADMIN_PASSWORD_FILE" || cleanup_result=1
 
         echo
         echo "Cleanup exit code: $cleanup_result"
     } >> "$REPORT_DIR/cleanup.log" 2>&1
 
+    if [[ "$cleanup_result" -ne 0 && "$result" -eq 0 ]]; then result=1; fi
+    if [[ "$result" -eq 0 ]]; then
+        sed 's/^RESULT=ASSERTIONS_COMPLETE_CLEANUP_PENDING$/RESULT=PASS/' "$REPORT_DIR/summary.pending" > "$REPORT_DIR/summary.txt" || result=1
+        rm -f "$REPORT_DIR/summary.pending" || result=1
+    fi
+    if [[ "$result" -ne 0 ]]; then rm -f "$REPORT_DIR/summary.txt" "$REPORT_DIR/summary.pending"; fi
+    if [[ "$result" -eq 0 ]]; then echo "INTEGRATION TEST RESULT: PASS"; else echo "INTEGRATION TEST RESULT: FAIL (see cleanup.log)" >&2; fi
     exit "$result"
 }
 
@@ -107,31 +104,58 @@ trap 'cleanup $?' EXIT
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
 
+ADMIN_PASSWORD_FILE="$(mktemp "$REPO_ROOT/.tools/greyrock-admin.XXXXXX")"
+openssl rand -hex 24 > "$ADMIN_PASSWORD_FILE"
+
+cat > "$RUNTIME_ENV" <<EOF
+ADMIN_PASSWORD_FILE=$ADMIN_PASSWORD_FILE
+TEST_DB_PASSWORD=$(openssl rand -hex 24)
+TEST_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
+PLUGIN_ZIP=$PLUGIN_ZIP
+INTEGRATION_TEST_FILE=$REPO_ROOT/tests/integration/admin-action-button-test.php
+WORDFENCE_PROBE_FILE=$REPO_ROOT/tests/integration/wordfence-block-api-probe.php
+OWNERSHIP_MIGRATION_TEST_FILE=$REPO_ROOT/tests/integration/ownership-migration-test.php
+MANUAL_REMOVAL_OWNERSHIP_TEST_FILE=$REPO_ROOT/tests/integration/manual-removal-ownership-test.php
+EOF
+
+cat "$SESSION_ENV" >> "$RUNTIME_ENV"
+
+
+
 echo "===== START DOCKER ====="
 
-sudo systemctl start \
+sudo -n timeout --signal=TERM --kill-after=5s 60s systemctl start \
     containerd.service \
     docker.socket \
     docker.service
 
-sudo docker info >/dev/null
+sudo -n timeout --signal=TERM --kill-after=5s 60s docker info >/dev/null
 
-SESSION_HASH="$(sha256sum "$SESSION_ENV" | cut -d " " -f 1)"
-IMAGE_CACHE_MARKER="$CACHE_DIR/images-ready.$SESSION_HASH"
+echo "===== PULL CURRENT TEST IMAGES ====="
+compose pull db wordpress cli
 
-if [[ -f "$IMAGE_CACHE_MARKER" ]]; then
-    echo "===== REUSE TEST SESSION IMAGES ====="
-    printf "WordPress: %s\n" "$WORDPRESS_IMAGE"
-    printf "WP-CLI:    %s\n" "$WPCLI_IMAGE"
-    printf "MariaDB:   %s\n" "$MARIADB_IMAGE"
-else
-    echo "===== PULL TEST SESSION IMAGES ====="
-    "${COMPOSE[@]}" pull db wordpress cli
-    touch "$IMAGE_CACHE_MARKER"
-fi
+# Verify the CLI image before installing or executing the plugin.
+compose run --rm --no-TTY --no-deps --entrypoint php cli \
+    -r 'echo PHP_VERSION, PHP_EOL;' | tee "$REPORT_DIR/cli-php-version.txt"
+python3 "$REPO_ROOT/scripts/php-runtime.py" --verify \
+    "$(tr -d '\r\n' < "$REPORT_DIR/cli-php-version.txt")" "$EXPECTED_PHP_VERSION" --exact
 
 echo "===== START WORDPRESS TEST STACK ====="
-"${COMPOSE[@]}" up --detach db wordpress
+compose up --detach db wordpress
+
+# Reject an outdated server image before WordPress or plugin installation.
+compose exec --no-TTY wordpress \
+    php -r 'echo PHP_VERSION, PHP_EOL;' | tee "$REPORT_DIR/php-version.txt"
+python3 "$REPO_ROOT/scripts/php-runtime.py" --verify \
+    "$(tr -d '\r\n' < "$REPORT_DIR/php-version.txt")" "$EXPECTED_PHP_VERSION" --exact
+
+echo "===== VERIFY PHP UPLOAD-PROGRESS MITIGATION ====="
+
+compose run --rm --no-TTY --no-deps --entrypoint php cli \
+    -r 'if (ini_get("session.upload_progress.enabled") !== "0") { fwrite(STDERR, "ERROR: CLI PHP upload progress enabled\\n"); exit(1); } echo "PASS: CLI PHP upload progress disabled\\n";'
+
+compose exec --no-TTY wordpress \
+    php -r 'if (ini_get("session.upload_progress.enabled") !== "0") { fwrite(STDERR, "ERROR: WordPress PHP upload progress enabled\\n"); exit(1); } echo "PASS: WordPress PHP upload progress disabled\\n";'
 
 echo "===== WAIT FOR WORDPRESS HTTP SERVICE ====="
 
@@ -152,87 +176,102 @@ done
 
 if [[ "$wordpress_ready" -ne 1 ]]; then
     echo "ERROR: WordPress did not become available." >&2
-    "${COMPOSE[@]}" ps > "$REPORT_DIR/compose-ps-failure.txt" 2>&1 || true
-    "${COMPOSE[@]}" logs --no-color > "$REPORT_DIR/compose-failure.log" 2>&1 || true
+    compose ps > "$REPORT_DIR/compose-ps-failure.txt" 2>&1 || true
+    compose logs --no-color > "$REPORT_DIR/compose-failure.log" 2>&1 || true
     exit 1
 fi
 
 echo "PASS: WordPress HTTP service is available."
 
+echo "===== DOWNLOAD RESOLVED STABLE WORDPRESS ====="
+compose run --rm --no-TTY cli \
+    core download --version="$EXPECTED_WORDPRESS_VERSION" --force --skip-content
+# Discard any Apache opcode cache populated while waiting for the base image.
+compose restart wordpress
+
 echo "===== INSTALL WORDPRESS ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
-    core install \
-    --url="$TEST_URL" \
-    --title="Grey Rock Automated Plugin Test" \
-    --admin_user="greyrock-test-admin" \
-    --admin_password="$TEST_ADMIN_PASSWORD" \
-    --admin_email="greyrock-test@example.invalid" \
-    --skip-email
+# Only this disposable CLI process runs as container root to read the 0600
+# bind-mounted credential. PHP reads it inside the container; the secret
+# never traverses host command arguments or stdin.
+compose run --rm --no-TTY --user 0:0 --entrypoint sh cli -c '
+# Suppress every byte inside the container, before sudo I/O logging.
+# Exceptions or installer hooks may include arguments in their diagnostics.
+if wp --allow-root --skip-wordpress eval-file /artifacts/install-test-wordpress.php "$1" >/dev/null 2>&1; then
+    echo "Disposable WordPress installed."
+else
+    echo "ERROR: Disposable WordPress installation failed (details withheld)." >&2
+    exit 1
+fi
+' sh "$TEST_URL"
 
 echo "===== INSTALL WORDFENCE ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin install wordfence \
     --activate
 
 echo "===== INSTALL LOCAL GREY ROCK ZIP ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin install /artifacts/greyrock-plugin.zip \
     --force \
     --activate
 
 echo "===== VERIFY WORDPRESS AND PLUGINS ====="
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     core version |
     tee "$REPORT_DIR/wordpress-version.txt"
 
-"${COMPOSE[@]}" exec --no-TTY wordpress \
+compose exec --no-TTY wordpress \
     php -r "echo PHP_VERSION, PHP_EOL;" |
     tee "$REPORT_DIR/php-version.txt"
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin list --format=table |
     tee "$REPORT_DIR/plugin-list.txt"
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin is-active wordfence
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin get wordfence --field=version |
     tee "$REPORT_DIR/wordfence-version.txt"
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     cli version |
     sed -E 's/^WP-CLI[[:space:]]+//' |
     tee "$REPORT_DIR/wpcli-version.txt"
 
-"${COMPOSE[@]}" exec --no-TTY db \
+compose exec --no-TTY db \
     mariadb --version |
     tee "$REPORT_DIR/mariadb-version.txt"
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin is-active "$PLUGIN_SLUG"
 
+echo "===== WORDPRESS COMPATIBILITY INTEGRATION ====="
+compose run --rm --no-TTY cli \
+    eval-file /artifacts/wordpress-compatibility-test.php
+
 echo "===== ADMIN ACTION BUTTON INTEGRATION ====="
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     eval-file /artifacts/admin-action-button-test.php
 
 echo "===== OWNERSHIP MIGRATION INTEGRATION ====="
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     eval-file /artifacts/ownership-migration-test.php
 
 echo "===== MANUAL REMOVAL OWNERSHIP INTEGRATION ====="
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     eval-file /artifacts/manual-removal-ownership-test.php
 
 echo "===== WORDFENCE BLOCK API PROBE ====="
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     eval-file /artifacts/wordfence-block-api-probe.php
 
-"${COMPOSE[@]}" run --rm --no-TTY cli \
+compose run --rm --no-TTY cli \
     plugin get "$PLUGIN_SLUG" --field=version |
     tee "$REPORT_DIR/greyrock-version.txt"
 
@@ -269,10 +308,10 @@ fi
 
 echo "===== COLLECT APPLICATION LOGS ====="
 
-"${COMPOSE[@]}" logs --no-color \
+compose logs --no-color \
     > "$REPORT_DIR/compose.log" 2>&1
 
-"${COMPOSE[@]}" exec --no-TTY wordpress sh -c '
+compose exec --no-TTY wordpress sh -c '
 if [ -f /var/www/html/wp-content/debug.log ]; then
     cat /var/www/html/wp-content/debug.log
 fi
@@ -290,8 +329,8 @@ if grep -Eiq \
     exit 1
 fi
 
-"${COMPOSE[@]}" ps > "$REPORT_DIR/compose-ps.txt"
-"${COMPOSE[@]}" images > "$REPORT_DIR/compose-images.txt"
+compose ps > "$REPORT_DIR/compose-ps.txt"
+compose images > "$REPORT_DIR/compose-images.txt"
 
 plugin_version="$(tr -d '\r\n' < "$REPORT_DIR/greyrock-version.txt")"
 wordpress_version="$(tr -d '\r\n' < "$REPORT_DIR/wordpress-version.txt")"
@@ -330,8 +369,8 @@ if [[ "$wpcli_version" != "$EXPECTED_WPCLI_VERSION" ]]; then
     exit 1
 fi
 
-cat > "$REPORT_DIR/summary.txt" <<EOF
-RESULT=PASS
+cat > "$REPORT_DIR/summary.pending" <<EOF
+RESULT=ASSERTIONS_COMPLETE_CLEANUP_PENDING
 WORDPRESS_VERSION=$wordpress_version
 PHP_VERSION=$php_version
 WORDFENCE_VERSION=$wordfence_version
@@ -346,6 +385,6 @@ TEST_URL=$TEST_URL
 EOF
 
 echo
-echo "INTEGRATION TEST RESULT: PASS"
+echo "Integration assertions completed; cleanup must succeed before PASS."
 echo "Containers and volumes will now be removed."
 echo "Docker services will now be stopped."

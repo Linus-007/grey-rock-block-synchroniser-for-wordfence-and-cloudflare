@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
 $capacity_options = [];
@@ -165,11 +166,11 @@ $wpdb = new CapacityDatabaseFake();
 $wpdb->rows = [[
   'ip_hex' => capacity_wf_hex($target_ip),
   'event_time' => $reset_at - 10,
-  'event_url' => 'https://sweers.ch/old-evidence',
+  'event_url' => 'https://greyscale.zone/old-evidence',
 ]];
 
 capacity_assert(
-  HistoricalBlockReader::get_candidates(24, 1, ['sweers.ch']) === [],
+  HistoricalBlockReader::get_candidates(24, 1, ['greyscale.zone']) === [],
   'Stale pre-reset evidence became eligible after capacity pressure.'
 );
 
@@ -222,7 +223,7 @@ $capacity_options[ResetWatermarkStore::SITE_OPTION] = [
 $wpdb->rows = [[
   'ip_hex' => capacity_wf_hex($boundary_ip),
   'event_time' => $boundary_reset - 1,
-  'event_url' => 'https://sweers.ch/already-selected',
+  'event_url' => 'https://greyscale.zone/already-selected',
 ]];
 
 capacity_assert(
@@ -234,7 +235,7 @@ capacity_assert(
   'A boundary reset disappeared inside the safety interval.'
 );
 capacity_assert(
-  HistoricalBlockReader::get_candidates(24, 1, ['sweers.ch']) === [],
+  HistoricalBlockReader::get_candidates(24, 1, ['greyscale.zone']) === [],
   'An already-selected pre-reset boundary event requalified.'
 );
 
