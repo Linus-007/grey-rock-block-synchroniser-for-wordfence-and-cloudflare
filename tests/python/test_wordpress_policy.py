@@ -115,7 +115,7 @@ class WordPressPolicyTests(unittest.TestCase):
             self.assertIn('core download --version="$EXPECTED_WORDPRESS_VERSION" --force --skip-content', text)
             self.assertLess(text.index('core download'), text.index('eval-file --use-include /artifacts/install-test-wordpress.php'))
             self.assertIn('if [[ "$wordpress_version" != "$EXPECTED_WORDPRESS_VERSION" ]]', text)
-            self.assertIn('eval-file /artifacts/wordpress-compatibility-test.php', text)
+            self.assertIn('eval-file --use-include /artifacts/wordpress-compatibility-test.php', text)
 
 
 if __name__ == '__main__':

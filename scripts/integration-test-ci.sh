@@ -311,8 +311,9 @@ compose run --rm --no-TTY cli \
 	plugin is-active "$PLUGIN_SLUG"
 
 echo "===== WORDPRESS COMPATIBILITY INTEGRATION ====="
+# Include strict-typed fixtures directly so PHP 8.2–8.4 can compile them.
 compose run --rm --no-TTY cli \
-    eval-file /artifacts/wordpress-compatibility-test.php
+    eval-file --use-include /artifacts/wordpress-compatibility-test.php
 
 echo "===== ADMIN ACTION BUTTON INTEGRATION ====="
 compose run --rm --no-TTY cli \
@@ -320,11 +321,11 @@ compose run --rm --no-TTY cli \
 
 echo "===== OWNERSHIP MIGRATION INTEGRATION ====="
 compose run --rm --no-TTY cli \
-    eval-file /artifacts/ownership-migration-test.php
+    eval-file --use-include /artifacts/ownership-migration-test.php
 
 echo "===== MANUAL REMOVAL OWNERSHIP INTEGRATION ====="
 compose run --rm --no-TTY cli \
-    eval-file /artifacts/manual-removal-ownership-test.php
+    eval-file --use-include /artifacts/manual-removal-ownership-test.php
 
 echo "===== WORDFENCE BLOCK API PROBE ====="
 compose run --rm --no-TTY cli \

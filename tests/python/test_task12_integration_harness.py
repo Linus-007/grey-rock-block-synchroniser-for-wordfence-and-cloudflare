@@ -95,6 +95,12 @@ if 'version' in a or '--version' in a or '--field=version' in a or 'php' in a: p
                 self.assertTrue((report / 'summary.txt').exists())
                 self.assertIn('install-test-wordpress.php', events)
                 self.assertIn('--user', events)
+                for event in map(json.loads, events.splitlines()):
+                    if 'eval-file' not in event:
+                        continue
+                    fixture = ROOT / 'tests/integration' / Path(event[-1]).name
+                    if 'declare(strict_types=1)' in fixture.read_text():
+                        self.assertIn('--use-include', event, fixture.name)
             else:
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertFalse((report / 'summary.txt').exists())
