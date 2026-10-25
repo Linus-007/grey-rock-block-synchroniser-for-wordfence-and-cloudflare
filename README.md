@@ -56,7 +56,7 @@ Use this mode when several domains or Cloudflare zones should share the same lis
 
 - Requires stable WordPress 7.0 or later.
 - Tested with WordPress 7.1.
-- Requires PHP 8.1 or later.
+- Requires PHP 8.2 or later, using a security-patched PHP release.
 - Supports only the current Wordfence release.
 - The compatibility target is the stable Wordfence release resolved from WordPress.org at validation time; check the recorded installed version and block API probe results.
 - Older Wordfence releases are not supported.
@@ -1204,8 +1204,8 @@ This software is supplied without warranty. Test it in a non-production environm
 
 ## Security support policy
 
-PHP 8.1 is the technical minimum, but is EOL and excluded from security
-support. Security support requires the latest stable patch of an upstream
+PHP 8.2 is the minimum supported branch. Security support requires the
+latest stable patch of an upstream
 security-maintained, reviewed branch with no known unresolved applicable
 vulnerability. The reviewed 2026-10-24 policy covers PHP 8.2–8.5 and requires
 review by 2026-12-31; CI resolves and checks every branch, including exact PHP

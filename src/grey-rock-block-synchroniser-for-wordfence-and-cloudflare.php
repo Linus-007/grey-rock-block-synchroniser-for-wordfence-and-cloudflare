@@ -6,7 +6,7 @@
  * Version: 1.3.11
  * Requires at least: 7.0
  * Tested up to: 7.1
- * Requires PHP: 8.1
+ * Requires PHP: 8.2
  * Author: Greyscale Zone
  * Author URI: https://greyscale.zone/
  * License: GPLv2 or later

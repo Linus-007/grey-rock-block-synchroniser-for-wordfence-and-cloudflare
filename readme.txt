@@ -3,7 +3,7 @@ Contributors: greyscalezone
 Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
-Requires PHP: 8.1
+Requires PHP: 8.2
 Stable tag: 1.3.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -696,8 +696,8 @@ Security-focused release that hardens synchronization locking, public-IP and Clo
 
 == Security support policy ==
 
-PHP 8.1 is the technical minimum, but is EOL and excluded from security
-support. Security support requires the latest stable patch of an upstream
+PHP 8.2 is the minimum supported branch. Security support requires the
+latest stable patch of an upstream
 security-maintained, reviewed branch with no known unresolved applicable
 vulnerability. The reviewed 2026-10-24 policy covers PHP 8.2–8.5 and requires
 review by 2026-12-31; CI resolves and checks every branch, including exact PHP
