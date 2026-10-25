@@ -133,7 +133,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertNotIn('images-ready.', text)
             self.assertIn('cli-php-version.txt', text)
             early_check = text.index('"$REPORT_DIR/php-version.txt"')
-            self.assertLess(early_check, text.index('eval-file /artifacts/install-test-wordpress.php'))
+            self.assertLess(early_check, text.index('eval-file --use-include /artifacts/install-test-wordpress.php'))
             self.assertGreaterEqual(text.count('exec --no-TTY wordpress'), 3)
 
 

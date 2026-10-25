@@ -113,7 +113,7 @@ class WordPressPolicyTests(unittest.TestCase):
         for name in ['integration-test.sh', 'integration-test-ci.sh']:
             text = (ROOT / 'scripts' / name).read_text()
             self.assertIn('core download --version="$EXPECTED_WORDPRESS_VERSION" --force --skip-content', text)
-            self.assertLess(text.index('core download'), text.index('eval-file /artifacts/install-test-wordpress.php'))
+            self.assertLess(text.index('core download'), text.index('eval-file --use-include /artifacts/install-test-wordpress.php'))
             self.assertIn('if [[ "$wordpress_version" != "$EXPECTED_WORDPRESS_VERSION" ]]', text)
             self.assertIn('eval-file /artifacts/wordpress-compatibility-test.php', text)
 
