@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / 'tests/fixtures'
+VERSION = re.search(r'^Stable tag: ([0-9]+\.[0-9]+\.[0-9]+)$',
+                    (ROOT / 'readme.txt').read_text(), re.MULTILINE).group(1)
 sys.path.insert(0, str(ROOT / 'scripts'))
 import action_pins
 import release_artifact as artifact
@@ -69,7 +72,7 @@ else: sys.exit(command(name, sys.argv[1:]))
             for path, command in [('scripts/semgrep-check.sh','semgrep'), ('scripts/integration-test.sh','integration'), ('scripts/cloudflare-integration-test.sh','provider')]: executable(root / path, command)
             (root / 'scripts/gitleaks-check.py').write_text('from task09_release_backend import command\nraise SystemExit(command("gitleaks", []))\n')
             (root / 'vendor/bin/phpcs').write_text('#!/bin/bash\nexit 0\n'); (root / 'vendor/bin/phpcs').chmod(0o700)
-            requested = '1.3.9' if scenario == 'requested_version' else '1.3.11'
+            requested = '1.3.9' if scenario == 'requested_version' else VERSION
             # Only the external SVN mutation adapter and interactive consent are
             # replaced. Actual main, gates, remote identity, freeze/ZIP/extract
             # decisions execute from the unmodified copied production script.
@@ -82,7 +85,7 @@ commit_wordpress_release() {{ python3 "{root}/dispatch.py" simulated-publisher "
 release_main publish {requested}
 '''
             env = dict(os.environ, PATH=str(root / 'bin') + ':/usr/bin:/bin',
-                       PYTHONPATH=str(root / 'site') + os.pathsep + str(FIXTURES), TASK09_FIXTURE_ROOT=str(root), TASK09_SCENARIO=scenario)
+                       PYTHONPATH=str(root / 'site') + os.pathsep + str(FIXTURES), TASK09_FIXTURE_ROOT=str(root), TASK09_SCENARIO=scenario, TASK09_VERSION=VERSION)
             result = subprocess.run(['bash', '-c', driver], cwd=root, env=env, capture_output=True, text=True, timeout=25)
             events = [json.loads(line) for line in (root / 'events.jsonl').read_text().splitlines()] if (root / 'events.jsonl').exists() else []
             self.assertFalse([e for e in events if e['effect'] == 'FORBIDDEN'], 'A forbidden real-write/service primitive was requested')
