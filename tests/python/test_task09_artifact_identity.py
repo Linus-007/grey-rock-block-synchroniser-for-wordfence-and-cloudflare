@@ -41,7 +41,7 @@ class ArtifactIdentity(unittest.TestCase):
         for entry in [artifact.SLUG+'/../escape', artifact.SLUG+'/./file', '/absolute', artifact.SLUG+'//file', artifact.SLUG+'/uninstall.php', symlink]:
             with self.subTest(entry=str(entry)), warnings.catch_warnings():
                 warnings.simplefilter('ignore', UserWarning)
-                with self.assertRaises((ValueError, KeyError)): artifact.snapshot(self.archive((entry, b'changed')), '1.3.10')
+                with self.assertRaises((ValueError, KeyError)): artifact.snapshot(self.archive((entry, b'changed')), '1.3.11')
 
     def test_actual_builder_rejects_traversal_and_preserves_custom_slug(self):
         spec=importlib.util.spec_from_file_location('task09_builder',ROOT/'scripts/build-release.py')
@@ -56,32 +56,32 @@ class ArtifactIdentity(unittest.TestCase):
     def test_replacement_receipt_is_not_independent_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); archive = root/'candidate.zip'; receipt = root/'receipt.json'
-            archive.write_bytes(self.archive()); original = artifact.create(archive, receipt, 'a'*40, '1.3.10')
+            archive.write_bytes(self.archive()); original = artifact.create(archive, receipt, 'a'*40, '1.3.11')
             archive.write_bytes(self.archive((artifact.SLUG+'/replacement.txt', b'replacement')))
-            artifact.create(archive, receipt, 'a'*40, '1.3.10')
-            with self.assertRaises(ValueError): artifact.verify(archive, receipt, original, 'a'*40, '1.3.10')
+            artifact.create(archive, receipt, 'a'*40, '1.3.11')
+            with self.assertRaises(ValueError): artifact.verify(archive, receipt, original, 'a'*40, '1.3.11')
 
     def test_extracted_publisher_tree_must_match_every_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); archive=root/'candidate.zip'; receipt=root/'receipt.json'
-            archive.write_bytes(self.archive()); expected=artifact.create(archive, receipt, 'a'*40, '1.3.10')
-            target=artifact.extract(archive,receipt,expected,'a'*40,'1.3.10',root/'extract')
-            artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.10')
+            archive.write_bytes(self.archive()); expected=artifact.create(archive, receipt, 'a'*40, '1.3.11')
+            target=artifact.extract(archive,receipt,expected,'a'*40,'1.3.11',root/'extract')
+            artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.11')
             (target/'unexpected.txt').write_text('extra')
-            with self.assertRaises(ValueError): artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.10')
+            with self.assertRaises(ValueError): artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.11')
             (target/'unexpected.txt').unlink(); (target/'uninstall.php').unlink()
-            with self.assertRaises(ValueError): artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.10')
+            with self.assertRaises(ValueError): artifact.verify_tree(target,receipt,expected,'a'*40,'1.3.11')
 
     def test_actual_github_publish_inline_rejects_paired_replacement(self):
         code=workflow_inline("          python3 - <<'PYTHON'\n", '\n          PYTHON')
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); (root/'dist').mkdir(); archive=root/'dist'/f'{artifact.SLUG}.zip'; receipt=root/'dist/release-receipt.json'
-            archive.write_bytes(self.archive()); receipt_sha=artifact.create(archive,receipt,'a'*40,'1.3.10')
-            env=dict(os.environ,EXPECTED_ARCHIVE_SHA=artifact.digest(archive.read_bytes()),EXPECTED_RECEIPT_SHA=receipt_sha,EXPECTED_VERSION='1.3.10',EXPECTED_COMMIT='a'*40)
+            archive.write_bytes(self.archive()); receipt_sha=artifact.create(archive,receipt,'a'*40,'1.3.11')
+            env=dict(os.environ,EXPECTED_ARCHIVE_SHA=artifact.digest(archive.read_bytes()),EXPECTED_RECEIPT_SHA=receipt_sha,EXPECTED_VERSION='1.3.11',EXPECTED_COMMIT='a'*40)
             good=subprocess.run([sys.executable,'-c',code],cwd=root,env=env,capture_output=True)
             self.assertEqual(good.returncode,0,good.stderr)
             archive.write_bytes(self.archive((artifact.SLUG+'/replacement.txt',b'changed')))
-            artifact.create(archive,receipt,'a'*40,'1.3.10')
+            artifact.create(archive,receipt,'a'*40,'1.3.11')
             (root/'dist'/f'{artifact.SLUG}.zip.sha256').write_text(artifact.digest(archive.read_bytes())+'  '+f'dist/{artifact.SLUG}.zip\n')
             bad=subprocess.run([sys.executable,'-c',code],cwd=root,env=env,capture_output=True)
             self.assertNotEqual(bad.returncode,0)
@@ -92,8 +92,8 @@ class ArtifactIdentity(unittest.TestCase):
         # A shell function replaces only the read-only git identity boundary.
         code='git() { printf "%s\\n" "$TEST_COMMIT"; }\n'+code
         with tempfile.TemporaryDirectory() as directory:
-            env=dict(os.environ,GITHUB_EVENT_NAME='workflow_dispatch',REQUESTED_VERSION='1.3.10',GITHUB_REF_NAME='main',GITHUB_REF='refs/heads/main',GITHUB_SHA='a'*40,TEST_COMMIT='a'*40,GITHUB_OUTPUT=str(Path(directory)/'output'))
-            for ref,commit,expected in [('refs/heads/main','a'*40,1),('refs/tags/v1.3.9','a'*40,1),('refs/tags/v1.3.10','b'*40,1),('refs/tags/v1.3.10','a'*40,0)]:
+            env=dict(os.environ,GITHUB_EVENT_NAME='workflow_dispatch',REQUESTED_VERSION='1.3.11',GITHUB_REF_NAME='main',GITHUB_REF='refs/heads/main',GITHUB_SHA='a'*40,TEST_COMMIT='a'*40,GITHUB_OUTPUT=str(Path(directory)/'output'))
+            for ref,commit,expected in [('refs/heads/main','a'*40,1),('refs/tags/v1.3.9','a'*40,1),('refs/tags/v1.3.11','b'*40,1),('refs/tags/v1.3.11','a'*40,0)]:
                 env.update(GITHUB_REF=ref,TEST_COMMIT=commit)
                 result=subprocess.run(['bash','-eu','-c',code],env=env,capture_output=True)
                 self.assertEqual(result.returncode,expected,result.stderr)

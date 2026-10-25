@@ -69,7 +69,7 @@ else: sys.exit(command(name, sys.argv[1:]))
             for path, command in [('scripts/semgrep-check.sh','semgrep'), ('scripts/integration-test.sh','integration'), ('scripts/cloudflare-integration-test.sh','provider')]: executable(root / path, command)
             (root / 'scripts/gitleaks-check.py').write_text('from task09_release_backend import command\nraise SystemExit(command("gitleaks", []))\n')
             (root / 'vendor/bin/phpcs').write_text('#!/bin/bash\nexit 0\n'); (root / 'vendor/bin/phpcs').chmod(0o700)
-            requested = '1.3.9' if scenario == 'requested_version' else '1.3.10'
+            requested = '1.3.9' if scenario == 'requested_version' else '1.3.11'
             # Only the external SVN mutation adapter and interactive consent are
             # replaced. Actual main, gates, remote identity, freeze/ZIP/extract
             # decisions execute from the unmodified copied production script.

@@ -52,7 +52,7 @@ def urlopen(request, **kwargs):
             rows = [{'id': i, 'name': n, 'path': '.github/workflows/' + p, 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'main', 'run_number': 10, 'status': 'completed', 'conclusion': 'success'} for i, (n, p) in enumerate([('Application Security', 'security.yml'), ('Continuous Integration', 'ci.yml'), ('WordPress Integration', 'integration.yml')], 1)]
             if scenario() == 'missing_security':
                 rows = rows[1:]
-            rows.append({'id': 4, 'name': 'Build and Release Plugin', 'path': '.github/workflows/' + ('other.yml' if scenario() == 'workflow_identity' else 'release.yml'), 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'v1.3.10', 'run_number': 10, 'status': 'completed', 'conclusion': 'success'})
+            rows.append({'id': 4, 'name': 'Build and Release Plugin', 'path': '.github/workflows/' + ('other.yml' if scenario() == 'workflow_identity' else 'release.yml'), 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'v1.3.11', 'run_number': 10, 'status': 'completed', 'conclusion': 'success'})
             value = {'workflow_runs': rows}
         return io.BytesIO(json.dumps(value).encode())
     if url.startswith('https://api.github.com/repos/' + REPOSITORY + '/git/ref/tags/'):
@@ -61,8 +61,8 @@ def urlopen(request, **kwargs):
         names = [SLUG + '.zip', SLUG + '.zip.sha256', 'release-receipt.json']
         if scenario() == 'missing_artifact':
             names = names[1:]
-        return io.BytesIO(json.dumps({'tag_name': 'v1.3.9' if scenario() == 'release_version' else 'v1.3.10', 'draft': False, 'prerelease': False, 'assets': [{'name': n, 'browser_download_url': f'https://github.com/{REPOSITORY}/releases/download/v1.3.10/{n}'} for n in names]}).encode())
-    prefix = f'https://github.com/{REPOSITORY}/releases/download/v1.3.10/'
+        return io.BytesIO(json.dumps({'tag_name': 'v1.3.9' if scenario() == 'release_version' else 'v1.3.11', 'draft': False, 'prerelease': False, 'assets': [{'name': n, 'browser_download_url': f'https://github.com/{REPOSITORY}/releases/download/v1.3.11/{n}'} for n in names]}).encode())
+    prefix = f'https://github.com/{REPOSITORY}/releases/download/v1.3.11/'
     if url.startswith(prefix):
         name = url[len(prefix):]
         data = archive_bytes()
@@ -72,7 +72,7 @@ def urlopen(request, **kwargs):
             checksum = '0' * 64 if scenario() == 'checksum_mismatch' else hashlib.sha256(data).hexdigest()
             return io.BytesIO((checksum + '  dist/' + SLUG + '.zip\n').encode())
         if name == 'release-receipt.json':
-            return io.BytesIO(json.dumps({'commit': COMMIT, 'version': '1.3.10', 'tag': 'v1.3.10', 'archive_sha256': hashlib.sha256(data).hexdigest()}).encode())
+            return io.BytesIO(json.dumps({'commit': COMMIT, 'version': '1.3.11', 'tag': 'v1.3.11', 'archive_sha256': hashlib.sha256(data).hexdigest()}).encode())
     raise RuntimeError('OFFLINE DENIAL: unexpected network request')
 
 
