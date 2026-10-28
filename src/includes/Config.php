@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync;
 
 use WPCF\FirewallSync\Services\CloudflareIdentifierValidator;
+use WPCF\FirewallSync\Services\AtomicFence;
 use WPCF\FirewallSync\Services\DnsAllowList;
 
 final class Config {
@@ -25,7 +26,9 @@ final class Config {
    * ordinary Options API.
    */
   public static function get_network_options(): array {
-    $options = get_site_option(self::NETWORK_OPTION, []);
+    $options = class_exists(AtomicFence::class) && AtomicFence::active()
+      ? AtomicFence::read_configuration(self::NETWORK_OPTION, true)
+      : get_site_option(self::NETWORK_OPTION, []);
 
     return is_array($options) ? $options : [];
   }
@@ -34,7 +37,12 @@ final class Config {
    * Return the current site's stored configuration.
    */
   public static function get_site_options(): array {
-    $options = get_option(self::SITE_OPTION, []);
+    // Protected transactions deliberately expose only a connection-bound
+    // database interface, so configuration reads must bypass WP option hooks
+    // and cache population while that interface is installed.
+    $options = class_exists(AtomicFence::class) && AtomicFence::active()
+      ? AtomicFence::read_configuration(self::SITE_OPTION, false)
+      : get_option(self::SITE_OPTION, []);
 
     return is_array($options) ? $options : [];
   }

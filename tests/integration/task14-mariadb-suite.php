@@ -14,7 +14,8 @@ $cases = ['ownership-add-manual', 'ownership-add-scheduled', 'ownership-remove',
   'site-reset-create', 'site-reset-clear', 'network-reset-set', 'network-reset-clear',
   'network-manual-add', 'network-manual-remove', 'scheduler-status',
   'cleanup-final-row-delete', 'reconcile-reset'];
-$scenarios = ['stale', 'locked', 'rollback', 'expiry', 'independent', 'unknown', 'unknown-rollback', 'unknown-expiry', 'connection-loss', 'unknown-connection-loss'];
+// Run independent progress first: shared-lock regressions should fail early.
+$scenarios = ['independent', 'stale', 'locked', 'rollback', 'expiry', 'unknown', 'unknown-rollback', 'unknown-expiry', 'connection-loss', 'unknown-connection-loss'];
 if (!in_array($expiry, ['forced', 'real'], true) || ($scenario !== 'all' && !in_array($scenario, $scenarios, true))) { exit(2); }
 if (isset($argv[4])) {
   if (!in_array($argv[4], $cases, true)) { exit(2); }

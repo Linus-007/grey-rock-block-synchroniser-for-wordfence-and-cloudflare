@@ -70,7 +70,7 @@ final class BlockLogger {
     global $wpdb;
 
     $table = $wpdb->prefix . self::TABLE;
-    $now = current_time('mysql');
+    $now = AtomicFence::mysql_time();
     $reason = self::normalize_reason($reason);
 
     if ($expires_at === null) {
@@ -120,11 +120,12 @@ final class BlockLogger {
     int $offset = 0,
     array $filters = [],
     string $orderby = 'created_at',
-    string $order = 'DESC'
+    string $order = 'DESC',
+    bool $audit = false
   ): array {
     global $wpdb;
 
-    $table = $wpdb->prefix . self::TABLE;
+    $table = $wpdb->prefix . ($audit ? AuditLog::TABLE : self::TABLE);
 
     $ip = isset($filters['ip'])
       ? trim((string) $filters['ip'])
@@ -271,10 +272,10 @@ final class BlockLogger {
     );
   }
 
-  public static function count(array $filters = []): int {
+  public static function count(array $filters = [], bool $audit = false): int {
     global $wpdb;
 
-    $table = $wpdb->prefix . self::TABLE;
+    $table = $wpdb->prefix . ($audit ? AuditLog::TABLE : self::TABLE);
 
     $ip = isset($filters['ip'])
       ? trim((string) $filters['ip'])
@@ -428,7 +429,7 @@ final class BlockLogger {
     $increment = $count_failure ? 1 : 0;
 
     $table = $wpdb->prefix . self::TABLE;
-    $now = current_time('mysql');
+    $now = AtomicFence::mysql_time();
     $reason = self::normalize_reason($reason);
 
     if ($expires_at === null) {

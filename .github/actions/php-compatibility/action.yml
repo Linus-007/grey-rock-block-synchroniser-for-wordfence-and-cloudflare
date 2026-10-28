@@ -3,6 +3,9 @@ description: Resolve stable PHP and require runtime and static compatibility che
 runs:
   using: composite
   steps:
+    - name: Validate release metadata before runtime setup
+      shell: bash
+      run: python3 scripts/release_metadata.py
     - name: Resolve latest stable PHP
       shell: bash
       run: python3 scripts/php-runtime.py >> "$GITHUB_ENV"

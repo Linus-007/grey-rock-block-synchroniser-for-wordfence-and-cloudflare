@@ -42,6 +42,8 @@ def snapshot(data, version, slug=SLUG):
         plugin = archive.read(f'{slug}/{SLUG}.php').decode('utf-8')
         readme = archive.read(f'{slug}/readme.txt').decode('utf-8')
         archive.getinfo(f'{slug}/uninstall.php')
+        from release_metadata import public_metadata
+        public_metadata(plugin, readme, version)
         header = re.search(r'^\s*\* Version:\s*(\S+)', plugin, re.M)
         stable = re.search(r'^Stable tag:\s*(\S+)', readme, re.M)
         if not header or not stable or header[1] != version or stable[1] != version:
@@ -108,16 +110,25 @@ def verify_tree(directory, receipt, expected, commit, version):
     if record.get('commit') != commit or record.get('version') != version or record.get('tag') != 'v' + version:
         raise ValueError('Tree identity mismatch')
     actual = {}
+    directories = set()
     for path in Path(directory).rglob('*'):
         relative = path.relative_to(directory)
         if '.svn' in relative.parts:
             continue
         if path.is_symlink():
             raise ValueError('Staged symlink forbidden')
+        if path.is_dir():
+            directories.add(relative.as_posix())
         if path.is_file():
             actual[SLUG + '/' + relative.as_posix()] = digest(read_bounded(path))
     wanted = {k: v['sha256'] for k, v in record['entries'].items() if not v['directory']}
-    if actual != wanted:
+    wanted_directories = set()
+    for name, entry in record['entries'].items():
+        relative = PurePosixPath(name).relative_to(SLUG)
+        if entry['directory'] and relative.as_posix() != '.':
+            wanted_directories.add(relative.as_posix())
+        wanted_directories.update(p.as_posix() for p in relative.parents if p.as_posix() != '.')
+    if actual != wanted or directories != wanted_directories:
         raise ValueError('Complete publisher tree differs from validated artifact')
 
 

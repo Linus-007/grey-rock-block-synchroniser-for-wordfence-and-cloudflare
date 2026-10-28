@@ -25,13 +25,15 @@ usage() {
 	cat <<'EOF'
 Usage:
   ./scripts/release-plugin.sh self-test
+  ./scripts/release-plugin.sh prepare
   ./scripts/release-plugin.sh validate
   ./scripts/release-plugin.sh publish X.Y.Z
+  ./scripts/release-plugin.sh remote-verify X.Y.Z
 
 Modes:
-  self-test  Run every nonpublishing release gate while this script is uncommitted.
+  self-test  Run nonpublishing validation; requires reviewed source changes.
   validate   Run every nonpublishing release gate from a clean committed repository.
-  publish    Verify an existing validated GitHub release, then request SVN publication approval.
+  publish    Verify and consume the existing immutable GitHub artifact; publish SVN only.
 EOF
 }
 
@@ -144,25 +146,6 @@ readme_stable_tag() {
 	head -n 1
 }
 
-validate_changed_files_for_self_test() {
-	local unexpected=0
-	local status_line
-	local path
-
-	while IFS= read -r status_line; do
-		[[ -z "$status_line" ]] && continue
-
-		path="${status_line:3}"
-
-		if [[ "$path" != "scripts/release-plugin.sh" ]]; then
-			echo "Unexpected repository change: $status_line" >&2
-			unexpected=1
-		fi
-	done < <(git status --porcelain=v1 --untracked-files=all)
-
-	[[ "$unexpected" -eq 0 ]] ||
-		fail "Self-test permits only scripts/release-plugin.sh to be uncommitted."
-}
 
 verify_repository() {
 	cd "$REPO_ROOT"
@@ -171,7 +154,7 @@ verify_repository() {
 	[[ -f "$PLUGIN_ENTRY" ]] || fail "Plugin entry file is unavailable."
 	[[ -f readme.txt ]] || fail "WordPress readme is unavailable."
 	[[ -f Makefile ]] || fail "Makefile is unavailable."
-	[[ -f "$RELEASE_CONFIG" ]] || fail "SVN release configuration is unavailable."
+
 
 	[[ "$(git branch --show-current)" == "main" ]] ||
 		fail "The current Git branch is not main."
@@ -180,7 +163,7 @@ verify_repository() {
 		fail "The fork remote is not the Linus-007 repository."
 
 	if [[ "$MODE" == "self-test" ]]; then
-		validate_changed_files_for_self_test
+		git diff --check
 	else
 		[[ -z "$(git status --porcelain=v1)" ]] ||
 			fail "The Git working tree is not clean."
@@ -194,6 +177,7 @@ verify_repository() {
 }
 
 load_and_verify_svn_configuration() {
+	[[ -f "$RELEASE_CONFIG" ]] || fail "SVN release configuration is unavailable."
 	# shellcheck disable=SC1090
 	source "$RELEASE_CONFIG"
 
@@ -212,9 +196,16 @@ load_and_verify_svn_configuration() {
 
 	[[ -d "$WPORG_SVN_WORKING_COPY/.svn" ]] ||
 		fail "The WordPress.org SVN working copy is unavailable."
+    require_command flock
+    exec 9>"$WPORG_SVN_WORKING_COPY/.svn/greyrock-release.lock"
+    flock --nonblock 9 || fail "Another release process owns the SVN working copy."
 
-	[[ -z "$(svn status "$WPORG_SVN_WORKING_COPY")" ]] ||
-		fail "The WordPress.org SVN working copy is not clean."
+    # Read-only remote recovery must remain available after an ambiguous
+    # commit that left local bookkeeping dirty. Publishing still requires clean.
+    if [[ "$MODE" != "remote-verify" ]]; then
+        [[ -z "$(svn status "$WPORG_SVN_WORKING_COPY")" ]] ||
+            fail "The WordPress.org SVN working copy is not clean."
+    fi
 	[[ "$(svn info --show-item url "$WPORG_SVN_WORKING_COPY")" == "$EXPECTED_SVN_URL" ]] ||
 		fail "The SVN working copy has an unexpected origin."
 
@@ -243,7 +234,7 @@ resolve_version() {
 	[[ "$stable_tag" == "$metadata_version" ]] ||
 		fail "Plugin version and readme Stable tag do not match."
 
-	if [[ "$MODE" == "publish" ]]; then
+	if [[ "$MODE" == "publish" || "$MODE" == "remote-verify" ]]; then
 		[[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
 			fail "Publish requires a semantic version in X.Y.Z format."
 
@@ -267,7 +258,7 @@ verify_release_does_not_exist() {
 }
 
 verify_release_readiness() {
-	(cd "$REPO_ROOT" && python3 scripts/release_readiness.py) || fail "Mandatory release requirements remain unresolved."
+	(cd "$REPO_ROOT" && python3 scripts/release_readiness.py --external-only) || fail "Mandatory release requirements remain unresolved."
 }
 
 capture_release_candidate() {
@@ -286,111 +277,14 @@ verify_release_candidate() {
 	python3 scripts/release_artifact.py verify --archive "$CANDIDATE_ARCHIVE" \
 		--receipt "$CANDIDATE_RECEIPT" --receipt-sha256 "$CANDIDATE_RECEIPT_SHA" \
 		--commit "$(git rev-parse HEAD)" --version "$VERSION"
+	[[ "$MODE" == "publish" || "$MODE" == "remote-verify" ]] && return 0
 	python3 scripts/release_artifact.py verify --archive "$RELEASE_ZIP" \
 		--receipt "$CANDIDATE_RECEIPT" --receipt-sha256 "$CANDIDATE_RECEIPT_SHA" \
 		--commit "$CANDIDATE_COMMIT" --version "$VERSION"
 }
 
 verify_github_main_checks() {
-	python3 - "$GITHUB_REPOSITORY" "$(git rev-parse HEAD)" <<'PYTHON'
-import json
-import sys
-import urllib.error
-import urllib.request
-
-repository = sys.argv[1]
-commit = sys.argv[2]
-
-required = {
-    "Application Security": (".github/workflows/security.yml", {
-        "WordPress security checks", "Semgrep CE SAST", "Gitleaks secret scan",
-    }),
-    "Continuous Integration": (".github/workflows/ci.yml", {"PHP compatibility"}),
-    "WordPress Integration": (".github/workflows/integration.yml", {"WordPress integration test"}),
-}
-
-url = (
-    f"https://api.github.com/repos/{repository}/actions/runs"
-    f"?head_sha={commit}&event=push&branch=main&per_page=100"
-)
-
-request = urllib.request.Request(
-    url,
-    headers={
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "grey-rock-release-validation",
-        "X-GitHub-Api-Version": "2022-11-28",
-    },
-)
-
-try:
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
-except (urllib.error.HTTPError, urllib.error.URLError) as error:
-    raise SystemExit(f"GitHub workflow lookup failed: {error}")
-
-latest = {}
-
-for run in payload.get("workflow_runs", []):
-    name = run.get("name")
-
-    if name not in required or run.get("path", "").split("@", 1)[0] != required[name][0]:
-        continue
-
-    existing = latest.get(name)
-
-    if (
-        existing is None
-        or run.get("run_number", 0) > existing.get("run_number", 0)
-    ):
-        latest[name] = run
-
-failed = False
-
-for name in sorted(required):
-    run = latest.get(name)
-
-    if run is None:
-        print(f"{name}: NOT FOUND")
-        failed = True
-        continue
-
-    status = run.get("status", "unknown")
-    conclusion = run.get("conclusion") or "pending"
-
-    print(f"{name}: {status} / {conclusion}")
-
-    if (status != "completed" or conclusion != "success"
-            or run.get("head_sha") != commit or run.get("head_branch") != "main"
-            or run.get("event") != "push" or type(run.get("id")) is not int
-            or run["id"] <= 0):
-        failed = True
-        continue
-
-    jobs_url = f"https://api.github.com/repos/{repository}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100"
-    try:
-        with urllib.request.urlopen(urllib.request.Request(jobs_url, headers=request.headers), timeout=30) as response:
-            jobs_payload = json.load(response)
-    except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
-        raise SystemExit("GitHub job verification unavailable; publication blocked.")
-    jobs = jobs_payload.get("jobs")
-    if (not isinstance(jobs, list) or jobs_payload.get("total_count") != len(jobs)
-            or not jobs or len(jobs) > 100):
-        raise SystemExit("GitHub job coverage is incomplete; publication blocked.")
-    for expected in required[name][1]:
-        matches = [job for job in jobs if job.get("name") == expected]
-        if (len(matches) != 1 or matches[0].get("status") != "completed"
-                or matches[0].get("conclusion") != "success"
-                or matches[0].get("head_sha") != commit):
-            failed = True
-    if any(job.get("status") != "completed" or job.get("conclusion") != "success" for job in jobs):
-        failed = True
-
-if failed:
-    raise SystemExit("Required GitHub checks have not all passed.")
-
-print("PASS: Required GitHub checks passed.")
-PYTHON
+    python3 scripts/release_evidence.py
 }
 
 run_release_gates() {
@@ -410,14 +304,9 @@ run_release_gates() {
 
 	echo
 	capture_release_candidate
-	echo "===== DISPOSABLE WORDPRESS INTEGRATION ====="
-	GREY_ROCK_VALIDATION_ZIP="$CANDIDATE_ARCHIVE" ./scripts/integration-test.sh
+    echo "===== DISPOSABLE WORDPRESS, WORDFENCE AND MARIADB INTEGRATION ====="
+    GREY_ROCK_TASK14_FENCING=1 GREY_ROCK_VALIDATION_ZIP="$CANDIDATE_ARCHIVE" ./scripts/integration-test-ci.sh
 
-	echo
-	echo "===== LIVE CLOUDFLARE INTEGRATION ====="
-	GREY_ROCK_VALIDATION_ZIP="$CANDIDATE_ARCHIVE" ./scripts/cloudflare-integration-test.sh
-
-	echo
 	echo "===== VERIFY THE SAME TESTED RELEASE ZIP ====="
 	verify_release_candidate
 
@@ -425,7 +314,7 @@ run_release_gates() {
 		tee "${RELEASE_ZIP}.sha256"
 
 	if [[ "$MODE" == "self-test" ]]; then
-		validate_changed_files_for_self_test
+		git diff --check
 	else
 		[[ -z "$(git status --porcelain=v1)" ]] ||
 			fail "Tests changed the Git working tree."
@@ -435,153 +324,19 @@ run_release_gates() {
 }
 
 wait_for_github_release() {
-	python3 - \
-		"$GITHUB_REPOSITORY" \
-		"$(git rev-parse HEAD)" \
-		"$VERSION" \
-		"$PLUGIN_SLUG" "$CANDIDATE_ARCHIVE" "$CANDIDATE_RECEIPT" "$CANDIDATE_RECEIPT_SHA" "$TEMP_DIR" <<'PYTHON'
-import json
-import sys
-import time
-import urllib.error
-import urllib.request
-
-from pathlib import Path
-import hashlib
-sys.path.insert(0, str(Path.cwd() / "scripts"))
-from release_artifact import verify, LIMIT
-repository, commit, version, plugin_slug, candidate, receipt, receipt_sha, temporary = sys.argv[1:]
-
-headers = {
-    "Accept": "application/vnd.github+json",
-    "User-Agent": "grey-rock-release-verification",
-    "X-GitHub-Api-Version": "2022-11-28",
-}
-
-runs_url = (
-    f"https://api.github.com/repos/{repository}/actions/runs"
-    f"?head_sha={commit}&per_page=50"
-)
-
-release_url = (
-    f"https://api.github.com/repos/{repository}/releases/tags/v{version}"
-)
-
-workflow = None
-
-for attempt in range(1, 41):
-    request = urllib.request.Request(runs_url, headers=headers)
-
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
-
-    candidates = [
-        run
-        for run in payload.get("workflow_runs", [])
-        if run.get("name") == "Build and Release Plugin"
-        and run.get("path", "").split("@", 1)[0] == ".github/workflows/release.yml"
-        and run.get("head_sha") == commit
-        and run.get("event") in {"push", "workflow_dispatch"}
-        and run.get("head_branch") in {"main", "v" + version}
-    ]
-
-    if candidates:
-        workflow = max(
-            candidates,
-            key=lambda run: run.get("run_number", 0),
-        )
-
-        status = workflow.get("status")
-        conclusion = workflow.get("conclusion")
-
-        print(
-            f"GitHub release workflow: "
-            f"{status} / {conclusion or 'pending'}"
-        )
-
-        if status == "completed":
-            if conclusion != "success":
-                raise SystemExit(
-                    "GitHub release workflow did not succeed."
-                )
-            break
-
-    if attempt == 40:
-        raise SystemExit("GitHub release workflow timed out.")
-
-    time.sleep(15)
-
-release = None
-
-for attempt in range(1, 21):
-    request = urllib.request.Request(release_url, headers=headers)
-
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            release = json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code != 404:
-            raise
-    else:
-        break
-
-    if attempt == 20:
-        raise SystemExit("GitHub release was not created in time.")
-
-    time.sleep(10)
-
-if (release.get("tag_name") != "v" + version or release.get("draft") is not False
-        or release.get("prerelease") is not False):
-    raise SystemExit("GitHub release identity/version is not an approved stable release.")
-
-def get_json(url):
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
-        return json.load(response)
-
-reference = get_json(f"https://api.github.com/repos/{repository}/git/ref/tags/v{version}").get("object", {})
-for depth in range(5):
-    if reference.get("type") == "commit":
-        break
-    if reference.get("type") != "tag" or not isinstance(reference.get("sha"), str):
-        raise SystemExit("GitHub tag identity unavailable.")
-    reference = get_json(f"https://api.github.com/repos/{repository}/git/tags/{reference['sha']}").get("object", {})
-if reference.get("type") != "commit" or reference.get("sha") != commit:
-    raise SystemExit("GitHub tag does not identify the validated commit.")
-
-assets = release.get("assets", [])
-for name in [f"{plugin_slug}.zip", f"{plugin_slug}.zip.sha256", "release-receipt.json"]:
-    if len([a for a in assets if a.get("name") == name]) != 1:
-        raise SystemExit("GitHub release artifact coverage is incomplete/duplicated.")
-
-def download(name):
-    url = f"https://github.com/{repository}/releases/download/v{version}/{name}"
-    asset = next(a for a in assets if a.get("name") == name)
-    if asset.get("browser_download_url") != url:
-        raise SystemExit("Unexpected release asset origin.")
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
-        data = response.read(LIMIT + 1)
-    if len(data) > LIMIT:
-        raise SystemExit("Release asset too large.")
-    return data
-
-archive = download(f"{plugin_slug}.zip")
-checksum = download(f"{plugin_slug}.zip.sha256").decode("ascii").split()
-if (len(checksum) != 2 or checksum[0] != hashlib.sha256(archive).hexdigest()
-        or checksum[1].lstrip("*") not in {f"{plugin_slug}.zip", f"dist/{plugin_slug}.zip"}):
-    raise SystemExit("GitHub artifact checksum mismatch.")
-# The downloaded checksum/receipt are not authenticity anchors. The retained
-# local producer receipt digest is independent of downloaded replacement files.
-remote = Path(temporary) / "github.zip"
-remote.write_bytes(archive)
-verify(remote, receipt, receipt_sha, commit, version, equivalent=True)
-remote_receipt = json.loads(download("release-receipt.json"))
-if (remote_receipt.get("commit") != commit or remote_receipt.get("version") != version
-        or remote_receipt.get("tag") != "v" + version
-        or remote_receipt.get("archive_sha256") != hashlib.sha256(archive).hexdigest()):
-    raise SystemExit("GitHub producer receipt is stale or has wrong identity.")
-print("PASS: Existing GitHub release matches the independently retained complete candidate.")
-
-PYTHON
+    umask 077
+    TEMP_DIR="$(mktemp -d)"
+    CANDIDATE_ARCHIVE="$TEMP_DIR/candidate.zip"
+    CANDIDATE_RECEIPT="$TEMP_DIR/receipt.json"
+    CANDIDATE_COMMIT="$(git rev-parse HEAD)"
+    CANDIDATE_RECEIPT_SHA="$(python3 scripts/release_evidence.py "$TEMP_DIR" "$VERSION" "$CANDIDATE_COMMIT")"
+    STATE_DIR="$REPO_ROOT/reports/releases/$VERSION"
+    mkdir -p "$STATE_DIR"
+    if [[ -f "$STATE_DIR/github-evidence.json" ]]; then
+        cmp "$TEMP_DIR/github-evidence.json" "$STATE_DIR/github-evidence.json" || fail "Immutable release identity changed; manual recovery required."
+    else
+        cp "$TEMP_DIR/github-evidence.json" "$STATE_DIR/github-evidence.json"
+    fi
 }
 
 schedule_svn_changes() {
@@ -664,6 +419,14 @@ result = subprocess.run(
 )
 
 root = ET.fromstring(result.stdout)
+# Existing SVN translation/externals properties could change the committed
+# bytes even when the working files match the receipt.
+for target in [working_copy / 'trunk', working_copy / 'tags' / version]:
+    properties = subprocess.run(['svn', 'proplist', '--xml', '--verbose', '--recursive', str(target)],
+                                check=True, capture_output=True, text=True)
+    for prop in ET.fromstring(properties.stdout).findall('.//property'):
+        if prop.get('name') in {'svn:eol-style', 'svn:keywords', 'svn:special', 'svn:externals'}:
+            raise SystemExit('SVN translation/externals property requires manual review: ' + prop.get('name'))
 seen = False
 
 for entry in root.findall(".//entry"):
@@ -816,32 +579,66 @@ commit_wordpress_release() {
 	done
 	echo "===== COMMIT WORDPRESS.ORG RELEASE ====="
 
-	svn commit \
-		--non-interactive \
-		--config-dir "$WPORG_SVN_CONFIG_DIR" \
-		--username "$WPORG_SVN_USERNAME" \
-		--message "Release $VERSION" \
-		"$svn_trunk" \
-		"$svn_tag"
-
-	SVN_COMMITTED=1
-
-	svn update \
-		--non-interactive \
-		--config-dir "$WPORG_SVN_CONFIG_DIR" \
-		--username "$WPORG_SVN_USERNAME" \
-		"$WPORG_SVN_WORKING_COPY"
-
-	[[ -z "$(svn status "$WPORG_SVN_WORKING_COPY")" ]] ||
-		fail "SVN working copy is not clean after publication."
-
-	svn info \
-		--non-interactive \
-		--config-dir "$WPORG_SVN_CONFIG_DIR" \
-		--username "$WPORG_SVN_USERNAME" \
-		"$WPORG_SVN_URL/tags/$VERSION" >/dev/null
+    if LC_ALL=C svn commit \
+        --non-interactive \
+        --config-dir "$WPORG_SVN_CONFIG_DIR" \
+        --username "$WPORG_SVN_USERNAME" \
+        --message "Release $VERSION" \
+        "$svn_trunk" "$svn_tag" >"$STATE_DIR/svn-transaction.log" 2>&1; then
+        SVN_COMMITTED=1
+        python3 - "$STATE_DIR" <<'PYTHON'
+import json, pathlib, re, sys
+state = pathlib.Path(sys.argv[1])
+record = json.loads((state / 'github-evidence.json').read_text())
+matches = re.findall(r'^Committed revision ([0-9]+)\.$', (state / 'svn-transaction.log').read_text(), re.M)
+record.update(stage='SVN PUBLISH; verification pending', svn_revision=int(matches[0]) if len(matches) == 1 else None)
+(state / 'svn-committed.json').write_text(json.dumps(record, sort_keys=True) + '\n')
+PYTHON
+    else
+        # A network error may occur after the server committed. Never rollback
+        # or blindly retry a transaction whose outcome has not been resolved.
+        SVN_COMMITTED=1
+        echo "SVN transaction returned failure; outcome uncertain. Run remote-verify before retry." >&2
+        return 1
+    fi
+    echo "SVN transaction succeeded; verifying authoritative revision."
+    verify_remote_svn || { echo "POST_COMMIT_VERIFICATION_FAILED; do not recommit. Run remote-verify." >&2; return 1; }
 
 	echo "PASS: WordPress.org SVN release $VERSION was published."
+}
+
+verify_remote_svn() {
+    local revision
+    revision="$(svn info --non-interactive --config-dir "$WPORG_SVN_CONFIG_DIR" \
+        --username "$WPORG_SVN_USERNAME" --show-item last-changed-revision "$WPORG_SVN_URL/tags/$VERSION")" || return 1
+    [[ "$revision" =~ ^[0-9]+$ ]] || fail "Remote SVN revision is invalid."
+    python3 - "$STATE_DIR" "$revision" <<'PYTHON' || return 1
+import json, pathlib, sys
+state = pathlib.Path(sys.argv[1])
+record = json.loads((state / 'github-evidence.json').read_text())
+record.update(svn_revision=int(sys.argv[2]), stage='SVN PUBLISH; tree verification pending')
+(state / 'svn-revision.json').write_text(json.dumps(record, sort_keys=True) + '\n')
+PYTHON
+    local exported="$TEMP_DIR/remote-$revision"
+    svn export --non-interactive --config-dir "$WPORG_SVN_CONFIG_DIR" \
+        --username "$WPORG_SVN_USERNAME" -r "$revision" \
+        "$WPORG_SVN_URL/tags/$VERSION@$revision" "$exported" >/dev/null || return 1
+    python3 scripts/release_artifact.py tree --target "$exported" --receipt "$CANDIDATE_RECEIPT" \
+        --receipt-sha256 "$CANDIDATE_RECEIPT_SHA" --commit "$CANDIDATE_COMMIT" --version "$VERSION" || return 1
+    python3 - "$STATE_DIR" "$revision" <<'PYTHON' || return 1
+import json, pathlib, sys
+state = pathlib.Path(sys.argv[1])
+record = json.loads((state / 'github-evidence.json').read_text())
+record.update(svn_revision=int(sys.argv[2]), destination='https://plugins.svn.wordpress.org/grey-rock-block-synchroniser-for-wordfence-and-cloudflare', stage='REMOTE VERIFY')
+path = state / 'svn-verified.json'
+if path.exists() and json.loads(path.read_text()) != record:
+    raise SystemExit('Remote release receipt changed; manual recovery required')
+temporary = state / 'svn-verified.pending'
+temporary.write_text(json.dumps(record, sort_keys=True) + '\n')
+temporary.replace(path)
+PYTHON
+    echo "AUTHORITATIVE_SVN_PUBLISHED version=$VERSION revision=$revision"
+    echo "WordPress.org public-directory indexing may lag; it is not an SVN transaction failure."
 }
 
 publish_wordpress_svn() {
@@ -854,6 +651,10 @@ publish_wordpress_svn() {
 }
 
 confirm_publication() {
+    if [[ "${GREY_ROCK_PUBLISH_AUTHORIZATION:-}" == "PUBLISH $VERSION TO $EXPECTED_SVN_URL" ]]; then
+        return 0
+    fi
+    [[ -t 0 ]] || fail "Noninteractive publication requires exact GREY_ROCK_PUBLISH_AUTHORIZATION."
 	printf "Type PUBLISH %s to continue: " "$VERSION"
 	local confirmation
 	read -r confirmation < /dev/tty
@@ -861,10 +662,13 @@ confirm_publication() {
 }
 
 publish_release() {
-	verify_release_readiness
-	verify_release_candidate
 	wait_for_github_release
-	verify_release_does_not_exist
+	verify_release_candidate
+    if svn info --non-interactive "$WPORG_SVN_URL/tags/$VERSION" >"$TEMP_DIR/existing-tag.txt" 2>"$TEMP_DIR/existing-tag-error.txt"; then
+        verify_remote_svn
+        return 0
+    fi
+    verify_release_does_not_exist
 	confirm_publication
 	# This publisher consumes an existing validated release. It never creates
 	# or pushes a tag, and never rebuilds the archive after the gates.
@@ -877,16 +681,16 @@ REQUESTED_VERSION="${2:-}"
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-verify_release_readiness
+cd "$REPO_ROOT"
 
 case "$MODE" in
-	self-test|validate)
+	self-test|validate|prepare)
 		if [[ -n "$REQUESTED_VERSION" ]]; then
 			usage
 			exit 2
 		fi
 		;;
-	publish)
+	publish|remote-verify)
 		if [[ -z "$REQUESTED_VERSION" ]]; then
 			usage
 			exit 2
@@ -900,22 +704,20 @@ esac
 
 for command_name in \
 	bash \
-	curl \
 	git \
-	make \
-	php \
-	python3 \
-	sha256sum \
-	svn
+	python3
 do
 	require_command "$command_name"
 done
 
 cd "$REPO_ROOT"
 
-verify_repository
-load_and_verify_svn_configuration
 resolve_version
+python3 scripts/release_metadata.py --version "$VERSION"
+if [[ "$MODE" == "prepare" ]]; then
+    exit 0
+fi
+verify_repository
 
 echo
 echo "===== RELEASE IDENTITY ====="
@@ -923,24 +725,27 @@ printf "Mode:             %s\n" "$MODE"
 printf "Version:          %s\n" "$VERSION"
 printf "Git commit:       %s\n" "$(git rev-parse HEAD)"
 printf "Git destination:  %s\n" "$(git remote get-url fork)"
-printf "SVN destination:  %s\n" "$WPORG_SVN_URL"
+printf "SVN destination:  %s\n" "$EXPECTED_SVN_URL"
 
 echo
 echo "===== GITHUB MAIN CHECKS ====="
 verify_github_main_checks
 
-if [[ "$MODE" == "publish" ]]; then
-	verify_release_does_not_exist
-fi
-
-run_release_gates
-
-if [[ "$MODE" == "publish" ]]; then
-	publish_release
+if [[ "$MODE" == "publish" || "$MODE" == "remote-verify" ]]; then
+    require_command svn
+    load_and_verify_svn_configuration
+    if [[ "$MODE" == "remote-verify" ]]; then
+        wait_for_github_release
+        verify_remote_svn
+    else
+        publish_release
+    fi
 else
-	echo
-	echo "RELEASE VALIDATION RESULT: PASS"
-	echo "No Git tag, GitHub release or WordPress.org SVN change was made."
+    require_command make
+    require_command php
+    require_command sha256sum
+    run_release_gates
+    echo "RELEASE VALIDATION RESULT: PASS (no publication)"
 fi
 
 }

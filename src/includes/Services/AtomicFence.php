@@ -17,6 +17,7 @@ final class AtomicFence {
   private static bool $active = false;
   private static bool $failed = false;
   private static array $cache = [];
+  private static array $configuration = [];
 
   public static function active(): bool { return self::$active; }
   public static function locked(): bool { return self::$active; }
@@ -54,7 +55,7 @@ final class AtomicFence {
     $begun = false; $committed = false;
     $deny_http = static fn () => new \WP_Error('fenced_transaction', 'HTTP is prohibited during local fenced work.');
     add_filter('pre_http_request', $deny_http, PHP_INT_MAX);
-    self::$failed = false; self::$cache = [];
+    self::$failed = false; self::$cache = []; self::$configuration = [];
     try {
       $db->query('SET SESSION innodb_lock_wait_timeout = 3');
       $db->query('SET SESSION lock_wait_timeout = 3');
@@ -93,7 +94,7 @@ final class AtomicFence {
       if ($begun && !$committed) {
         try { $db->query('ROLLBACK'); } catch (\Throwable) { $db->close(); }
       }
-      self::$active = false; $wpdb = $original;
+      self::$active = false; self::$configuration = []; $wpdb = $original;
       remove_filter('pre_http_request', $deny_http, PHP_INT_MAX);
       foreach ($settings as $setting => $value) {
         try { $db->query('SET SESSION ' . $setting . ' = ' . $value); } catch (\Throwable) { $db->close(); break; }
@@ -110,6 +111,53 @@ final class AtomicFence {
     if (!is_numeric($now) || (int) $now <= 0 || (int) $now >= $deadline) {
       throw new \RuntimeException('Lease expired before local transaction completion.');
     }
+  }
+
+  /** Site-local SQL time without invoking WordPress cache loaders in a fence. */
+  public static function mysql_time(): string {
+    if (!self::$active) { return current_time('mysql'); }
+    $zone = self::read_configuration('timezone_string', false);
+    if (is_string($zone) && $zone !== '') {
+      return (new \DateTimeImmutable('@' . time()))->setTimezone(new \DateTimeZone($zone))->format('Y-m-d H:i:s');
+    }
+    $offset = self::read_configuration('gmt_offset', false);
+    $seconds = is_numeric($offset) ? (int) round((float) $offset * 3600) : 0;
+    return gmdate('Y-m-d H:i:s', time() + $seconds);
+  }
+
+  /**
+   * Configuration is immutable to protected work. Read it without cache hooks
+   * or row locks so unrelated destination scopes do not serialize on settings.
+   * Mutable ownership/reset options must continue to use option() below.
+   */
+  public static function read_configuration(string $key, bool $network) {
+    $allowed = [
+      'firewall_sync_options' => false,
+      'firewall_sync_network_options' => true,
+      'timezone_string' => false,
+      'gmt_offset' => false,
+    ];
+    if (!self::$active || !array_key_exists($key, $allowed) || $allowed[$key] !== $network) {
+      throw new \RuntimeException('Unsupported protected configuration read.');
+    }
+    global $wpdb;
+    $network = $network && is_multisite();
+    $table = $network ? $wpdb->sitemeta : $wpdb->options;
+    $network_id = $network ? get_current_network_id() : 0;
+    $identity = $table . ':' . $network_id . ':' . $key;
+    if (array_key_exists($identity, self::$configuration)) { return self::$configuration[$identity]; }
+    AtomicConnection::identifier($table);
+    $wpdb->require_innodb($table);
+    $where = $network
+      ? $wpdb->prepare('site_id = %d AND meta_key = %s', $network_id, $key)
+      : $wpdb->prepare('option_name = %s', $key);
+    $column = $network ? 'meta_value' : 'option_value';
+    $rows = $wpdb->get_results("SELECT {$column} AS value FROM `{$table}` WHERE {$where}", ARRAY_A);
+    if (($wpdb->last_error ?? '') !== '' || count($rows) > 1) {
+      throw new \RuntimeException('Ambiguous or unavailable protected configuration.');
+    }
+    // Retain one read snapshot per transaction without shared row locks.
+    return self::$configuration[$identity] = $rows === [] ? [] : maybe_unserialize($rows[0]['value']);
   }
 
   /** Authoritative options; bypass hooks/caches and serialize absent network rows. */

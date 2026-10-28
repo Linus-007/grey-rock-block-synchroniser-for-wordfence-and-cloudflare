@@ -18,6 +18,7 @@ namespace WPCF\FirewallSync\Services;
 final class HistoricalBlockReader {
   private const WORDFENCE_ACTION = 'blocked:waf';
   private const WORDFENCE_ACTIVE_ACTION = 'blocked:wordfence';
+  private const PAGE_SIZE = 500;
 
   /**
    * Read historical Wordfence WAF blocks from the shared hits table.
@@ -32,7 +33,9 @@ final class HistoricalBlockReader {
     int $lookback_hours,
     int $minimum_events,
     array $site_hosts = [],
-    array $watermarks = []
+    array $watermarks = [],
+    array $active_ips = [],
+    ?callable $audit = null
   ): ?array {
     global $wpdb;
 
@@ -59,79 +62,93 @@ final class HistoricalBlockReader {
 
     $cutoff = time() - ($lookback_hours * HOUR_IN_SECONDS);
 
-    $rows = $wpdb->get_results(
-      $wpdb->prepare(
-        "SELECT
-          HEX(IP) AS ip_hex,
-          ctime AS event_time,
-          URL AS event_url
-        FROM {$table}
-        WHERE action = %s
-          AND ctime >= %f
-        ORDER BY ctime DESC",
-        self::WORDFENCE_ACTION,
-        (float) $cutoff
-      ),
-      ARRAY_A
+    $rows = self::read_rows(
+      $table,
+      'action IN (%s, %s) AND ctime >= %f',
+      [self::WORDFENCE_ACTION, self::WORDFENCE_ACTIVE_ACTION, (float) $cutoff]
     );
-
-    if (!is_array($rows)) {
-      return null;
-    }
 
     $hosts = self::normalize_hosts($site_hosts);
     $events_by_ip = [];
 
-    foreach ($rows as $row) {
-      $ip = self::decode_wordfence_ip(
-        (string) ($row['ip_hex'] ?? '')
-      );
+    try {
+      foreach ($rows as $row) {
+        if (!self::is_site_event((string) ($row['event_url'] ?? ''), $hosts)) {
+          continue;
+        }
 
-      if ($ip === null || !IpValidator::validate_public_ip($ip)) {
-        continue;
+        $ip = self::decode_wordfence_ip(
+          (string) ($row['ip_hex'] ?? '')
+        );
+
+        if ($ip === null || !IpValidator::validate_public_ip($ip)) {
+          if ($audit !== null) {
+            $audit('', 'skip', 'invalid or non-public historical address', (int) ($row['event_time'] ?? 0), (int) ($row['event_id'] ?? 0));
+          }
+          continue;
+        }
+
+        $action = (string) ($row['event_action'] ?? self::WORDFENCE_ACTION);
+        // wfHits does not preserve a plugin block's type, duration or scope.
+        // Country, UA/referrer, throttle and expired IP blocks cannot safely
+        // be converted into a new address-wide block from a hit alone.
+        if ($action === self::WORDFENCE_ACTIVE_ACTION && !isset($active_ips[$ip])) {
+          if ($audit !== null) {
+            $audit($ip, 'skip', self::plugin_skip_reason((string) ($row['event_description'] ?? '')), (int) ($row['event_time'] ?? 0), (int) ($row['event_id'] ?? 0));
+          }
+          continue;
+        }
+        if (!in_array($action, [self::WORDFENCE_ACTION, self::WORDFENCE_ACTIVE_ACTION], true)) {
+          continue;
+        }
+
+        $event_time = (int) floor(
+          (float) ($row['event_time'] ?? 0)
+        );
+        $watermark = max(
+          0,
+          (int) ($watermarks[$ip] ?? 0),
+          ResetWatermarkStore::get($ip)
+        );
+
+        if ($event_time <= $watermark) {
+          if ($audit !== null) {
+            $audit($ip, 'skip', 'evidence suppressed by explicit reset watermark', $event_time, (int) ($row['event_id'] ?? 0));
+          }
+          continue;
+        }
+
+        if ($action === self::WORDFENCE_ACTION) {
+          $events_by_ip[$ip] ??= ['count' => 0, 'latest' => 0];
+          $events_by_ip[$ip]['count']++;
+          $events_by_ip[$ip]['latest'] = max($events_by_ip[$ip]['latest'], $event_time);
+        } elseif ($audit !== null) {
+          $audit($ip, 'detection', 'blocked:wordfence covered by current IP-block authority', $event_time, (int) ($row['event_id'] ?? 0));
+        }
       }
-
-      $event_host = self::host_from_url(
-        (string) ($row['event_url'] ?? '')
-      );
-
-      if ($event_host === null || !isset($hosts[$event_host])) {
-        continue;
-      }
-
-      $event_time = (int) floor(
-        (float) ($row['event_time'] ?? 0)
-      );
-      $watermark = max(
-        0,
-        (int) ($watermarks[$ip] ?? 0),
-        ResetWatermarkStore::get($ip)
-      );
-
-      if ($event_time <= $watermark) {
-        continue;
-      }
-
-      if (!isset($events_by_ip[$ip])) {
-        $events_by_ip[$ip] = [];
-      }
-
-      $events_by_ip[$ip][] = $event_time;
+    } catch (\UnexpectedValueException) {
+      return null;
     }
 
     $candidates = [];
 
     foreach ($events_by_ip as $ip => $event_times) {
-      $event_count = count($event_times);
+      $event_count = $event_times['count'];
 
       if ($event_count < $minimum_events) {
+        if ($audit !== null) {
+          $audit($ip, 'skip', sprintf('historical event threshold not met (%d of %d)', $event_count, $minimum_events), $event_times['latest']);
+        }
         continue;
       }
 
+      if ($audit !== null) {
+        $audit($ip, 'detection', sprintf('qualifying blocked:waf evidence (%d events)', $event_count), $event_times['latest']);
+      }
       $candidates[] = [
         'ip' => $ip,
         'event_count' => $event_count,
-        'latest_event' => max($event_times),
+        'latest_event' => $event_times['latest'],
       ];
     }
 
@@ -192,37 +209,69 @@ final class HistoricalBlockReader {
       return false;
     }
 
-    $rows = $wpdb->get_results(
-      $wpdb->prepare(
-        "SELECT
-          URL AS event_url
-        FROM {$table}
-        WHERE action = %s
-          AND HEX(IP) = %s
-          AND ctime >= %f
-        ORDER BY ctime DESC",
-        self::WORDFENCE_ACTIVE_ACTION,
-        $ip_hex,
-        (float) $blocked_time
-      ),
-      ARRAY_A
+    $rows = self::read_rows(
+      $table,
+      'action = %s AND HEX(IP) = %s AND ctime >= %f',
+      [self::WORDFENCE_ACTIVE_ACTION, $ip_hex, (float) $blocked_time]
     );
 
-    if (!is_array($rows)) {
+    try {
+      foreach ($rows as $row) {
+        if (self::is_site_event((string) ($row['event_url'] ?? ''), $hosts)) {
+          return true;
+        }
+      }
+    } catch (\UnexpectedValueException) {
       return null;
     }
 
-    foreach ($rows as $row) {
-      $event_host = self::host_from_url(
-        (string) ($row['event_url'] ?? '')
-      );
-
-      if ($event_host !== null && isset($hosts[$event_host])) {
-        return true;
-      }
-    }
-
     return false;
+  }
+
+  /**
+   * Descending primary-key pagination bounds each result without OFFSET races.
+   * Newer concurrent inserts are evaluated on the next run, not interleaved
+   * into an already-started scan. Never reconcile a partially failed scan.
+   *
+   * @return \Generator<int, array>
+   */
+  private static function read_rows(string $table, string $where, array $values): \Generator {
+    global $wpdb;
+    $cursor = PHP_INT_MAX;
+    $page_size = self::PAGE_SIZE;
+    do {
+      $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT id AS event_id, HEX(IP) AS ip_hex, ctime AS event_time,
+          URL AS event_url, action AS event_action, actionDescription AS event_description
+         FROM {$table} WHERE {$where} AND id < %d
+         ORDER BY id DESC LIMIT {$page_size}",
+        ...array_merge($values, [$cursor])
+      ), ARRAY_A);
+      if (!is_array($rows) || ($wpdb->last_error ?? '') !== '') {
+        throw new \UnexpectedValueException('Historical Wordfence page could not be read completely.');
+      }
+      foreach ($rows as $row) { yield $row; }
+      if (count($rows) < $page_size) { return; }
+      $next = (int) ($rows[array_key_last($rows)]['event_id'] ?? 0);
+      if ($next <= 0 || $next >= $cursor) {
+        throw new \UnexpectedValueException('Historical Wordfence cursor did not advance.');
+      }
+      $cursor = $next;
+    } while (true);
+  }
+
+  private static function plugin_skip_reason(string $description): string {
+    // These are stable Wordfence 9.0.2 identifiers, not translated UI text.
+    if (str_starts_with($description, 'blocked access via country blocking')) {
+      return 'blocked:wordfence country policy cannot authorise an address-wide block';
+    }
+    if ($description === 'UA/Referrer/IP Range not allowed') {
+      return 'blocked:wordfence request pattern cannot authorise an address-wide block';
+    }
+    if (str_starts_with($description, 'Exceeded the maximum') && str_contains($description, 'per minute')) {
+      return 'blocked:wordfence rate policy requires current IP-block authority';
+    }
+    return 'blocked:wordfence requires current IP-block authority; type and expiry absent from hit';
   }
 
   /** @return array<string, bool> */
@@ -238,6 +287,24 @@ final class HistoricalBlockReader {
     }
 
     return $normalized;
+  }
+
+  /** Use WordPress's domain/path routing to separate same-host subsites. */
+  private static function is_site_event(string $url, array $hosts): bool {
+    $host = self::host_from_url($url);
+    if ($host === null || !isset($hosts[$host])) { return false; }
+    if (is_multisite() && function_exists('get_site_by_path')) {
+      global $wpdb;
+      $path = wp_parse_url($url, PHP_URL_PATH);
+      $site = get_site_by_path($host, is_string($path) && $path !== '' ? $path : '/');
+      if (($wpdb->last_error ?? '') !== '') {
+        throw new \UnexpectedValueException('WordPress site attribution could not be read completely.');
+      }
+      if ($site !== false) { return (int) $site->blog_id === get_current_blog_id(); }
+      // Mapped home/siteurl aliases absent from the core site-domain catalog
+      // retain the existing exact-host policy; do not invent alias routing.
+    }
+    return true;
   }
 
   private static function host_from_url(string $url): ?string {

@@ -252,10 +252,6 @@ $sync_batch = new ReflectionMethod(
   WPCF\FirewallSync\Services\SyncScheduler::class,
   'synchronize_account_list_batch'
 );
-$skip_present = new ReflectionMethod(
-  WPCF\FirewallSync\Services\SyncScheduler::class,
-  'should_skip_present_account_list_ip'
-);
 $account_id = str_repeat('a', 32);
 $list_id = str_repeat('b', 32);
 $hosts = [
@@ -308,14 +304,15 @@ shared_assert(
   !isset($site_logs[3][$shared_ip]),
   'Unattacked Site C received synchronization state.'
 );
-shared_assert(
-  $skip_present->invoke(null, true, false) === false,
-  'Cloudflare membership incorrectly suppresses first site attribution.'
-);
-shared_assert(
-  $skip_present->invoke(null, true, true) === true,
-  'An existing site episode was not suppressed while Cloudflare remained active.'
-);
+// Repeat an attributable site episode with confirmed remote membership.
+// The Client must avoid a second mutation while refreshing local provenance.
+$current_blog_id = 1;
+$client = new WPCF\FirewallSync\Cloudflare\Client('token', '');
+$sync_batch->invoke(null, $client, $account_id, $list_id, [[
+  'ip' => $shared_ip, 'reason' => 'refreshed evidence', 'expires_at' => null,
+]]);
+shared_assert($cloudflare_create_count === 1, 'Present membership caused a duplicate mutation.');
+shared_assert($site_logs[1][$shared_ip]['reason'] === 'sync: refreshed evidence', 'Present membership did not refresh attributable local state.');
 
 echo "Multisite shared-IP attribution regression: PASS\n";
 

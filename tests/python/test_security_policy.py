@@ -108,7 +108,7 @@ class SecurityPolicyTests(unittest.TestCase):
         self.assertNotIn('actions/checkout', publish)
         self.assertNotIn('continue-on-error:', workflow)
         self.assertNotIn('if:', workflow)
-        self.assertIn('sha256sum --check', publish)
+        self.assertIn("hashlib.sha256((base / name).read_bytes()).hexdigest()", publish)
         security = (ROOT / '.github/workflows/security.yml').read_text()
         self.assertIn('workflow_call:', security)
         self.assertIn('fetch-depth: 0', security)

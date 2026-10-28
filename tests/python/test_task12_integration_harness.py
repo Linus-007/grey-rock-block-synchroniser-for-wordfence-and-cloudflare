@@ -78,7 +78,11 @@ if 'version' in a or '--version' in a or '--field=version' in a or 'php' in a: p
                 path.chmod(0o700)
             env = dict(os.environ, PATH=f'{root}/bin:/usr/bin:/bin', FIXTURE_ROOT=str(root),
                        SCENARIO=scenario, GREY_ROCK_TEST_CACHE_DIR=str(root / 'cache'),
-                       GREY_ROCK_COMPOSE_TIMEOUT_SECONDS='1')
+                       # Keep intentional stop/timeout controls at one second.
+                       # Successful Python substitutes need startup headroom on
+                       # a loaded runner; production watchdogs are unchanged.
+                       GREY_ROCK_COMPOSE_TIMEOUT_SECONDS=(
+                           '1' if scenario in ('stopped', 'cleanup-stopped') else '5'))
             result = subprocess.run(['bash', str(root / 'scripts' / name)], env=env,
                                     capture_output=True, text=True, timeout=30)
             report = root / 'reports' / ('integration-ci' if '-ci' in name else 'integration')

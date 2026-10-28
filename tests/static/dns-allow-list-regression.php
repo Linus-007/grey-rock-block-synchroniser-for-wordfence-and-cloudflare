@@ -120,10 +120,10 @@ if (
   substr_count(
     $scheduler,
     'isset($allowed_ips[$ip])'
-  ) !== 2
+  ) !== 3
 ) {
   fail_test(
-    'Both current and historical candidate paths must exclude allowed addresses.'
+    'Current, historical and audit candidate paths must exclude allowed addresses.'
   );
 }
 

@@ -26,7 +26,7 @@ class EvidenceTests(unittest.TestCase):
         controls = evidence.required_controls(['8.2', '8.5'])
         sha = 'a' * 40
         jobs = [dict(
-            name=('integration-gates' if name == 'Mandatory real InnoDB concurrency'
+            name=('integration-gates' if name in {'Mandatory real InnoDB concurrency', 'runtime-policy'}
                   or name.startswith('Security runtime (') else 'security-gates') + ' / ' + name,
             head_sha=sha, status='completed', conclusion='success',
                      steps=[dict(name=step, conclusion='success')]) for name, step in controls.items()]

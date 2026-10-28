@@ -39,6 +39,7 @@ validate:
 	@$(PHP) tests/static/task07-uninstall-scope-regression.php
 	@echo "Task 14 modeled safety follows; real MariaDB validation is a separate required gate."
 	@$(PHP) tests/static/task08-local-fencing-characterization.php --require-fenced
+	@$(PHP) tests/static/configuration-read-regression.php
 	@$(PHP) tests/static/task06-destination-regression.php
 	@$(PHP) tests/static/task11-destination-prepare-regression.php
 	@$(PHP) tests/static/task06-destination-fault-regression.php
@@ -56,6 +57,9 @@ validate:
 	@$(PHP) tests/static/dns-allow-list-regression.php
 	@$(PHP) tests/static/wordfence-9-compatibility-regression.php
 	@$(PHP) tests/static/historical-block-evidence-regression.php
+	@$(PHP) tests/static/historical-wordfence-coverage-regression.php
+	@$(PHP) tests/static/historical-pagination-regression.php
+	@$(PHP) tests/static/historical-path-attribution-regression.php
 	@$(PHP) tests/static/cloudflare-inventory-regression.php
 	@$(PHP) tests/static/reset-watermark-capacity-regression.php
 	@$(PHP) tests/static/multisite-shared-ip-attribution-regression.php
@@ -82,6 +86,7 @@ validate:
 	@echo "Validation passed."
 
 metadata-check:
+	@$(PYTHON) scripts/release_metadata.py
 	@$(PYTHON) scripts/wordpress_policy.py --check-metadata
 	@PLUGIN_VERSION="$$(sed -nE 's/^[[:space:]]*\*[[:space:]]Version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*$$/\1/p' "$(PLUGIN_ENTRY)" | head -n 1)"; \
 	STABLE_TAG="$$(sed -nE 's/^Stable tag:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*$$/\1/p' readme.txt | head -n 1)"; \
@@ -124,18 +129,19 @@ release: version-check build
 release-readiness:
 	@$(PYTHON) scripts/release_readiness.py
 
-tag-release: release-readiness release
-	@if ! git diff --quiet || ! git diff --cached --quiet; then \
-		echo "The working tree or staging area contains uncommitted changes."; \
-		exit 1; \
-	fi
-	@if git rev-parse "v$(VERSION)" >/dev/null 2>&1; then \
-		echo "Tag v$(VERSION) already exists."; \
-		exit 1; \
-	fi
-	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
-	@git push "$(GIT_REMOTE)" "v$(VERSION)"
-	@echo "Tag v$(VERSION) pushed to $(GIT_REMOTE)."
+tag-release: version-check
+	@set -eu; \
+	 test -z "$$(git status --porcelain=v1 --untracked-files=normal)"; \
+	 test "$$(git branch --show-current)" = main; \
+	 test "$$(git remote get-url $(GIT_REMOTE))" = 'git@github.com:Linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.git'; \
+	 if git rev-parse --verify "refs/tags/v$(VERSION)" >/dev/null 2>&1; then echo 'Existing local tag: inspect and resume; never move it.'; exit 1; fi; \
+	 remote_tags="$$(git ls-remote --tags "$(GIT_REMOTE)" "refs/tags/v$(VERSION)" "refs/tags/v$(VERSION)^{}")"; \
+	 test -z "$$remote_tags" || { echo 'Existing remote tag: inspect failed/incomplete release; never move it.'; exit 1; }; \
+	 $(PYTHON) scripts/release_readiness.py --main; \
+	 $(MAKE) release VERSION="$(VERSION)"; \
+	 test -z "$$(git status --porcelain=v1 --untracked-files=normal)"; \
+	 git tag -a "v$(VERSION)" -m "Release v$(VERSION)"; \
+	 git push "$(GIT_REMOTE)" "refs/tags/v$(VERSION)"
 
 clean:
 	@rm -rf "$(RELEASE_DIR)"

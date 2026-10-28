@@ -29,7 +29,7 @@ final class LogTable extends WP_List_Table {
 
 	private string $order = 'DESC';
 
-	public function __construct() {
+	public function __construct(private bool $audit = false) {
 		parent::__construct(
 			[
 				'singular' => __( 'Synchronisation Record', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
@@ -95,14 +95,15 @@ final class LogTable extends WP_List_Table {
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		$total_items = BlockLogger::count( $this->filters );
+		$total_items = BlockLogger::count( $this->filters, $this->audit );
 
 		$this->items_data = BlockLogger::get_logs(
 			$per_page,
 			( $current_page - 1 ) * $per_page,
 			$this->filters,
 			$this->orderby,
-			$this->order
+			$this->order,
+			$this->audit
 		);
 
 		$this->set_pagination_args(
@@ -218,7 +219,7 @@ final class LogTable extends WP_List_Table {
 
 			<a
 				class="button"
-				href="<?php echo esc_url( admin_url( 'admin.php?page=firewall-sync-log' ) ); ?>"
+				href="<?php echo esc_url( admin_url( $this->audit ? 'admin.php?page=firewall-sync-log-audit' : 'admin.php?page=firewall-sync-log' ) ); ?>"
 			>
 				<?php
 				echo esc_html__(

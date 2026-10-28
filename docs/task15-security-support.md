@@ -1,5 +1,7 @@
 # Runtime support and release evidence
 
+Current release execution and recovery instructions: [release-system-repair.md](release-system-repair.md). Historical execution results below do not certify the current candidate.
+
 PHP 8.1 remains the technical syntax/runtime minimum declared in plugin metadata.
 This task does not raise it: existing code uses PHP 8.1 features, and older syntax
 compatibility has not been reassessed. Technical installation eligibility does

@@ -72,8 +72,8 @@ final class Plugin {
       define(
         'WPCF_FS_PLUGIN_DIR',
         plugin_dir_path(
-          __DIR__
-          . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
+          dirname(__DIR__)
+          . '/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
         )
       );
     }
@@ -82,8 +82,8 @@ final class Plugin {
       define(
         'WPCF_FS_PLUGIN_URL',
         plugin_dir_url(
-          __DIR__
-          . '/../grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
+          dirname(__DIR__)
+          . '/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php'
         )
       );
     }

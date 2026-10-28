@@ -303,7 +303,7 @@ $require(
 $require(
   str_contains(
     $contents['settings'],
-    "network_admin_url('admin.php?page=firewall-sync-network-log')"
+    "network_admin_url(\$audit ? 'admin.php?page=firewall-sync-network-log-audit' : 'admin.php?page=firewall-sync-network-log')"
   ),
   'Network Synchronisation Log must provide a reset target.'
 );

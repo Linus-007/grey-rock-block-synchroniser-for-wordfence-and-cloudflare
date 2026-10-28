@@ -119,6 +119,15 @@ final class Settings {
 
     add_submenu_page(
       'firewall-sync-settings',
+      __('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      __('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      'manage_options',
+      'firewall-sync-log-audit',
+      [self::class, 'render_audit']
+    );
+
+    add_submenu_page(
+      'firewall-sync-settings',
       __('Manual IP Block', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
       __('Manual IP Block', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
       'manage_options',
@@ -150,6 +159,23 @@ final class Settings {
       'firewall-sync-network-log',
       [self::class, 'render_network_log']
     );
+
+    add_submenu_page(
+      'firewall-sync-settings',
+      __('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      __('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      'manage_network_options',
+      'firewall-sync-network-log-audit',
+      [self::class, 'render_audit']
+    );
+  }
+
+  public static function render_audit(): void {
+    if (!current_user_can(is_network_admin() ? 'manage_network_options' : 'manage_options')) {
+      wp_die(esc_html__('You do not have permission to view the audit history.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'));
+    }
+    if (is_network_admin()) { self::render_network_log(true); }
+    else { self::render_log(true); }
   }
 
   public static function enqueue_styles(string $hook_suffix): void {
@@ -173,7 +199,7 @@ final class Settings {
     );
   }
 
-  public static function render_network_log(): void {
+  public static function render_network_log(bool $audit = false): void {
     if (
       !is_multisite()
       || !is_network_admin()
@@ -301,7 +327,8 @@ final class Settings {
             0,
             $site_filters,
             $orderby === 'site' ? 'created_at' : $orderby,
-            $order
+            $order,
+            $audit
           ) as $log
         ) {
           $rows[] = [
@@ -358,10 +385,9 @@ final class Settings {
     <div class="wrap">
       <h1>
         <?php
-        echo esc_html__(
-          'Synchronisation Log',
-          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-        );
+        echo $audit
+          ? esc_html__('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+          : esc_html__('Synchronisation Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
         ?>
       </h1>
 
@@ -378,7 +404,7 @@ final class Settings {
         <input
           type="hidden"
           name="page"
-          value="firewall-sync-network-log"
+          value="<?php echo $audit ? 'firewall-sync-network-log-audit' : 'firewall-sync-network-log'; ?>"
         />
 
         <div class="tablenav top">
@@ -478,7 +504,7 @@ final class Settings {
 
             <a
               class="button"
-              href="<?php echo esc_url(network_admin_url('admin.php?page=firewall-sync-network-log')); ?>"
+              href="<?php echo esc_url(network_admin_url($audit ? 'admin.php?page=firewall-sync-network-log-audit' : 'admin.php?page=firewall-sync-network-log')); ?>"
             >
               <?php
               echo esc_html__(
@@ -523,7 +549,7 @@ final class Settings {
                 $sort_url = add_query_arg(
                   array_filter(
                     [
-                      'page' => 'firewall-sync-network-log',
+                      'page' => $audit ? 'firewall-sync-network-log-audit' : 'firewall-sync-network-log',
                       'site' => $filters['site'],
                       'ip' => $filters['ip'],
                       'reason' => $filters['reason'],
@@ -596,7 +622,7 @@ final class Settings {
     <?php
   }
 
-  public static function render_log(): void {
+  public static function render_log(bool $audit = false): void {
     if (is_network_admin()) {
       wp_die(
         esc_html__(
@@ -606,16 +632,15 @@ final class Settings {
       );
     }
 
-    $log_table = new LogTable();
+    $log_table = new LogTable($audit);
     $log_table->prepare_items();
     ?>
     <div class="wrap">
       <h1>
         <?php
-        echo esc_html__(
-          'Synchronisation Log',
-          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-        );
+        echo $audit
+          ? esc_html__('Historical Audit', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+          : esc_html__('Synchronisation Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
         ?>
       </h1>
 
@@ -632,7 +657,7 @@ final class Settings {
         <input
           type="hidden"
           name="page"
-          value="firewall-sync-log"
+          value="<?php echo $audit ? 'firewall-sync-log-audit' : 'firewall-sync-log'; ?>"
         />
         <?php $log_table->display(); ?>
       </form>

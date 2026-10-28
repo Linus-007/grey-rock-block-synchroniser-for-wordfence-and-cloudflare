@@ -77,7 +77,7 @@ class ArtifactIdentity(unittest.TestCase):
             with self.assertRaises(ValueError): artifact.verify_tree(target,receipt,expected,'a'*40,VERSION)
 
     def test_actual_github_publish_inline_rejects_paired_replacement(self):
-        code=workflow_inline("          python3 - <<'PYTHON'\n", '\n          PYTHON')
+        code=textwrap.dedent((ROOT/'.github/workflows/release.yml').read_text().split("      - name: Verify independent producer identity before publication",1)[1].split("          python3 - <<'PYTHON'\n",1)[1].split("\n          PYTHON",1)[0])
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); (root/'dist').mkdir(); archive=root/'dist'/f'{artifact.SLUG}.zip'; receipt=root/'dist/release-receipt.json'
             archive.write_bytes(self.archive()); receipt_sha=artifact.create(archive,receipt,'a'*40,VERSION)
@@ -101,3 +101,46 @@ class ArtifactIdentity(unittest.TestCase):
                 env.update(GITHUB_REF=ref,TEST_COMMIT=commit)
                 result=subprocess.run(['bash','-eu','-c',code],env=env,capture_output=True)
                 self.assertEqual(result.returncode,expected,result.stderr)
+
+
+class PublicMetadataRegression(unittest.TestCase):
+    def test_flat_download_checksum_checks_actual_bytes(self):
+        text = (ROOT / '.github/workflows/release.yml').read_text().split('      - name: Verify downloaded checksum', 1)[1]
+        code = textwrap.dedent(text.split("          python3 - <<'PYTHON'\n", 1)[1].split('\n          PYTHON', 1)[0])
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory) / 'dist'; base.mkdir()
+            name = artifact.SLUG + '.zip'; (base / name).write_bytes(b'exact downloaded bytes')
+            for path in [name, 'dist/' + name]:
+                (base / (name + '.sha256')).write_text(artifact.digest((base / name).read_bytes()) + '  ' + path + '\n')
+                result = subprocess.run([sys.executable, '-c', code], cwd=directory, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            (base / name).write_bytes(b'replaced')
+            self.assertNotEqual(subprocess.run([sys.executable, '-c', code], cwd=directory, capture_output=True).returncode, 0)
+
+    def test_metadata_history_and_source_bound_approval(self):
+        import release_metadata
+        from cve_approval import verify_approval
+        import shutil
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / 'src', root / 'src'); shutil.copytree(ROOT / 'security', root / 'security')
+            for name in ['readme.txt', 'README.md']: shutil.copyfile(ROOT / name, root / name)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True, capture_output=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--allow-empty', '-qm', 'Local release fixture'], check=True)
+            for version in ['1.3.11','1.3.12','1.3.13']:
+                subprocess.run(['git','-C',str(root),'tag','v'+version],check=True)
+            self.assertEqual(release_metadata.validate(root, VERSION), VERSION)
+            verify_approval(root, 'CVE-2026-115560')
+            for filename, old, new in [
+                ('README.md', 'badge/version-' + VERSION, 'badge/version-0.0.0'),
+                ('README.md', '### 1.3.12', '### missing'),
+                ('readme.txt', '= ' + VERSION + ' =', '= Unreleased ='),
+                ('readme.txt', 'Requires PHP: 8.2', 'Requires PHP: 8.1'),
+                ('readme.txt', 'Stable tag: ' + VERSION, 'Stable tag: 0.0.0'),
+            ]:
+                path = root / filename; before = path.read_text(); path.write_text(before.replace(old, new))
+                with self.subTest(filename=filename, field=old), self.assertRaises(ValueError): release_metadata.validate(root, VERSION)
+                path.write_text(before)
+            path = root / 'src' / (artifact.SLUG + '.php')
+            path.write_text(path.read_text().replace('Version: ' + VERSION, 'Version: 1.3.15'))
+            with self.assertRaises(ValueError): verify_approval(root, 'CVE-2026-115560')

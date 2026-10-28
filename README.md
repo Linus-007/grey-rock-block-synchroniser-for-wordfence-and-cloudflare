@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.13-blue)
+![Version](https://img.shields.io/badge/version-1.3.14-blue)
 ![Tested with WordPress 7.1](https://img.shields.io/badge/WordPress-tested%20with%207.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -25,7 +25,7 @@ Existing WordPress option names, hooks, database table names and the `WPCF\Firew
 
 ## What the plugin does
 
-The plugin reads current Wordfence blocks and historical Wordfence WAF events recorded as `blocked:waf`, then sends qualifying public IP addresses to Cloudflare using one of two modes.
+The plugin reads current Wordfence IP blocks and historical events recorded as `blocked:waf` and `blocked:wordfence`, then sends qualifying public IP addresses to Cloudflare using one of two modes. Historical plugin-block hits require current IP-block authority; request counts alone cannot establish scope or expiry. Throttles are not forwarded as IP blocks.
 
 Grey Rock supports the current Wordfence release only. Active IP blocks are read through `wfBlock::ipBlocks(true)`, and historical WAF synchronization resolves the event table through `wfDB::networkTable('wfHits')`. Older Wordfence releases and removed interfaces such as `wfBlock::getBlocks()` are intentionally unsupported. If a required current Wordfence interface is unavailable, synchronization fails instead of silently continuing with partial Wordfence data.
 
@@ -1023,9 +1023,45 @@ Zone.
 The complete external-service, privacy, retention and uninstall
 disclosures are maintained in `readme.txt`.
 
+## Historical Audit
+
+The **Historical Audit** page records automatic Wordfence detections, skips and reasons,
+confirmed Cloudflare membership, and failed operations separately from the
+**Synchronisation Log**, which remains current synchronisation state. Existing
+records are retained in that state table; they are not invented retroactively
+as historical audit evidence. Site Admin sees the current site only. Network
+Admin combines recent records from sites in the current network, with the same
+filters and sorting as the existing log (up to 500 records per site).
+
+`blocked:wordfence` covers country policies, request patterns, throttles and
+address blocks. These hits do not retain authoritative block type and expiry.
+Grey Rock audits them but forwards an address only when a current unexpired
+Wordfence IP block authorises it. Permanent blocks require Wordfence's explicit
+permanent IP-block state. A throttle does not authorise an edge IP block.
+Historical `blocked:waf` evidence continues to use the configured event threshold
+and records expiry at its latest qualifying event plus the lookback period.
+Cloudflare removal follows the existing cleanup and reconciliation schedules.
+
+A complete Account IP List inventory determines membership. Present entries
+refresh attributable local state and expiry without another add operation.
+Absent entries require evidence newer than the previous successful handling;
+explicit reset watermarks still suppress older evidence. Membership from another
+site does not create attribution without matching local request evidence.
+
+Audit records contain public IPs, internal decision reasons, evidence timestamps
+and, for individual hits, Wordfence row IDs. URLs, credentials, usernames and
+request payloads are not copied. Repeated detections/skips for the same evidence
+are deduplicated; each attempted success/failure is retained. Records older than
+30 days are pruned on the next audit write for that site. Expiration, reset,
+reconciliation and state deletion do not erase this history. Uninstall removes
+it. Audit database failures make synchronisation incomplete.
+
+See [the investigation and verification report](docs/historical-wordfence-investigation.md)
+for the qualification policy, production reproduction and test limitations.
+
 ## Release building
 
-The repository Makefile is the authoritative interface for validation, version checking, package creation and release tagging.
+The repository Makefile is the authoritative interface for validation, version checking, package creation and release tagging. Follow [the release stages and recovery procedure](docs/release-system-repair.md), including authenticated immutable-artifact verification before SVN publication.
 
 Validate the repository:
 
@@ -1044,6 +1080,22 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.14
+- Bound historical database result pages and audit buffering, aggregate WAF count/latest time per IP, and use WordPress domain/path routing to separate catalogued same-host subsites.
+- Read and audit both Wordfence historical block event types while requiring current IP-block authority for plugin-block hits and preserving authoritative expiry.
+- Reconcile confirmed account-list membership with local state and expiry, preserve resets and prevent stale historical evidence from recreating removed membership.
+- Add separate site-scoped historical audit storage and administration views, with bounded retention and fail-closed persistence.
+- Exclude Wordfence throttles from IP-block forwarding, repair network-active path detection and cold-cache reset configuration reads, and add Wordfence 9.0.2, multisite and MariaDB regression coverage.
+
+### 1.3.13
+- Updated release metadata and README version badge. Retained the source-bound CVE exception record; no new runtime fix is claimed.
+
+### 1.3.12
+- Removed unsupported PHP 8.1 compatibility claims and updated the release metadata.
+
+### 1.3.11
+- Corrected disposable WordPress installation diagnostics and strict-typed integration fixture loading; updated release metadata.
 
 ### 1.3.10
 - Fixed historical Wordfence WAF evidence being suppressed by a successful synchronization timestamp, which could cause still-valid Wordfence-owned blocks to be removed from Cloudflare during ownership reconciliation.

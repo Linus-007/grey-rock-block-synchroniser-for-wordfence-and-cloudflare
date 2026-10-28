@@ -1,5 +1,7 @@
 # Release policy and offline verification
 
+Current release execution and recovery instructions: [release-system-repair.md](release-system-repair.md). Historical execution results below do not certify the current candidate.
+
 Task 15 supersedes the historical runtime and gate status below. See
 [the current support and evidence policy](task15-security-support.md).
 

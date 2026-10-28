@@ -19,6 +19,9 @@ use WPCF\FirewallSync\Plugin;
 final class MigrationManager {
   public static function run(?string $from_version): void {
     $to_version = Plugin::get_version();
+    if (version_compare($to_version, '1.3.14', '>=') && ($from_version === null || version_compare($from_version, '1.3.14', '<'))) {
+      AuditLog::create_table();
+    }
 
     if (
       $from_version === null

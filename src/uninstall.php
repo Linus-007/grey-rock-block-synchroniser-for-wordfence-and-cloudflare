@@ -26,6 +26,8 @@ function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_sit
   global $wpdb;
 
   $table = $wpdb->prefix . 'wpcf_sync_blocks';
+  $audit_table = $wpdb->prefix . 'wpcf_sync_audit';
+  $wpdb->query("DROP TABLE IF EXISTS `{$audit_table}`");
   $ownership_table = $wpdb->prefix . 'wpcf_sync_ownership';
 
   $wpdb->query(

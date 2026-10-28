@@ -1,0 +1,40 @@
+services:
+  db:
+    image: mariadb:latest
+    environment:
+      MARIADB_DATABASE: greyrock_task13_historical
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: disposable-fixture
+      MARIADB_ROOT_PASSWORD: disposable-root-fixture
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    networks: [isolated]
+    volumes: [database:/var/lib/mysql]
+  core:
+    image: wordpress:php8.5-apache
+    entrypoint: [sh, -c]
+    command: ['cp -a /usr/src/wordpress/. /var/www/html/ && chown -R 33:33 /var/www/html']
+    volumes: [wordpress:/var/www/html]
+    network_mode: none
+  cli:
+    image: wordpress:cli-php8.5
+    user: '33:33'
+    entrypoint: [wp]
+    environment:
+      GREY_ROCK_TASK13_DISPOSABLE: 'YES'
+      WP_ENVIRONMENT_TYPE: local
+    volumes:
+      - ./php-security.ini:/usr/local/etc/php/conf.d/zz-greyrock-security.ini:ro
+      - wordpress:/var/www/html
+      - ../../:/candidate:ro
+      - ${GREYROCK_WORDFENCE_FIXTURE:?fixture directory required}:/wordfence-fixture:ro
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true
+volumes:
+  wordpress:
+  database:

@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.13
+Stable tag: 1.3.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -279,6 +279,17 @@ Manually added Cloudflare account-list entries remain until an authorised admini
 
 Uninstalling the plugin removes its local plugin options and tables according to the included uninstall routine. It does not automatically remove every entry previously sent to Cloudflare. Administrators should review the Cloudflare destination when permanently discontinuing the plugin.
 
+Historical Audit stores public IP addresses, internal decision reasons, evidence
+timestamps and Wordfence row IDs in a separate site-specific table. It does not
+copy request URLs, usernames, request bodies or credentials. Repeated detections
+and skips are deduplicated; success/failure attempts are retained individually.
+Audit records older than 30 days are removed on the next audit write for that
+site. Synchronisation-state removal does not delete audit history. Uninstall
+removes the audit table. Site Admin sees one site's audit; Network Admin sees
+recent records from the current network. Historical blocked:wordfence requests
+require current IP-block authority; missing block type or expiry is not inferred
+from request counts. Throttles are not forwarded as IP blocks.
+
 == Installation ==
 
 1. Install and activate the current Wordfence release.
@@ -472,6 +483,23 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.14 =
+* Bound historical result pages and audit buffering, aggregate WAF count/latest time per IP, and separate catalogued same-host multisite paths through WordPress routing.
+
+* Read and audit blocked:wordfence alongside historical WAF evidence. Plugin-block hits require current IP-block authority and never imply a permanent block by themselves.
+* Refresh local attribution and expiry for confirmed account-list membership without duplicate additions. Preserve explicit resets and require new evidence before restoring missing membership.
+* Add a separate Historical Audit page for detections, skips, successes, failures and reasons. Audit storage failures make synchronisation incomplete.
+* Exclude throttles from IP-block forwarding, repair network-active path detection and cold-cache reset configuration reads, and extend Wordfence 9.0.2 and disposable multisite/MariaDB regression coverage.
+
+= 1.3.13 =
+* Updated release metadata and README version badge. Retained the source-bound CVE exception record; no new runtime fix is claimed.
+
+= 1.3.12 =
+* Removed unsupported PHP 8.1 compatibility claims and updated the release metadata.
+
+= 1.3.11 =
+* Corrected disposable WordPress installation diagnostics and strict-typed integration fixture loading; updated release metadata.
 
 = 1.3.10 =
 * Fixed historical Wordfence WAF evidence being suppressed by a successful synchronization timestamp, which could cause still-valid Wordfence-owned blocks to be removed from Cloudflare during ownership reconciliation.

@@ -19,12 +19,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Release metadata preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate requested version and release metadata
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: python3 scripts/release_metadata.py --version "${REQUESTED_VERSION:-${GITHUB_REF_NAME#v}}"
+
   security-gates:
+    needs: preflight
     uses: ./.github/workflows/security.yml
     permissions:
       contents: read
 
   integration-gates:
+    needs: preflight
     uses: ./.github/workflows/integration.yml
     permissions:
       contents: read
@@ -119,7 +134,7 @@ jobs:
         with:
           name: validated-release
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
           path: |
             dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
             dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip.sha256
@@ -139,7 +154,15 @@ jobs:
           path: dist
 
       - name: Verify downloaded checksum
-        run: sha256sum --check dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip.sha256
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib, pathlib
+          base = pathlib.Path('dist')
+          name = 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip'
+          fields = (base / (name + '.sha256')).read_text().split()
+          if len(fields) != 2 or fields[1].lstrip('*') not in {name, 'dist/' + name} or fields[0] != hashlib.sha256((base / name).read_bytes()).hexdigest():
+              raise SystemExit('Downloaded checksum mismatch')
+          PYTHON
 
       - name: Verify independent producer identity before publication
         env:
@@ -166,6 +189,25 @@ jobs:
           record = json.loads(receipt)
           if record.get('commit') != os.environ['EXPECTED_COMMIT'] or record.get('version') != os.environ['EXPECTED_VERSION'] or record.get('tag') != 'v' + os.environ['EXPECTED_VERSION'] or record.get('archive_sha256') != os.environ['EXPECTED_ARCHIVE_SHA']:
               raise SystemExit('Producer receipt identity mismatch')
+          PYTHON
+
+      - name: Refuse existing or incomplete GitHub releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, urllib.error, urllib.request
+          url = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY'] + '/releases/tags/v' + os.environ['RELEASE_VERSION']
+          request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  json.load(response)
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+          else:
+              raise SystemExit('Release already exists: verify/resume the existing artifact; never overwrite it')
           PYTHON
 
       - name: Create GitHub release

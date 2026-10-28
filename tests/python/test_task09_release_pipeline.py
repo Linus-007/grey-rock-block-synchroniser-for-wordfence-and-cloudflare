@@ -23,9 +23,10 @@ class FullOfflinePublisher(unittest.TestCase):
     def run_case(self, scenario):
         with tempfile.TemporaryDirectory(prefix='grey-rock-release-offline-') as directory:
             root = Path(directory)
-            for name in ['scripts', 'security', 'src', '.github']:
+            for name in ['scripts', 'security', 'src', '.github', 'tests/docker']:
                 shutil.copytree(ROOT / name, root / name)
             shutil.copyfile(ROOT / 'readme.txt', root / 'readme.txt')
+            shutil.copyfile(ROOT / 'README.md', root / 'README.md')
             shutil.copyfile(ROOT / 'Makefile', root / 'Makefile')
             (root / '.git').mkdir(); (root / 'dist').mkdir(); (root / 'site').mkdir()
             (root / 'vendor/bin').mkdir(parents=True)
@@ -39,14 +40,20 @@ class FullOfflinePublisher(unittest.TestCase):
             (root / 'security/release-gates.json').write_text(json.dumps(catalog))
             # Publication-flow unit tests mock the external evidence boundary.
             # Real verifier rejection/acceptance is covered by Task 15 tests.
-            (root / 'scripts/release_evidence.py').write_text(
-                'import os\n'
-                'from pathlib import Path\n'
-                'def verify():\n'
-                '    root = Path(os.environ["TASK09_FIXTURE_ROOT"])\n'
-                '    if (root / "late-evidence-revoked").exists():\n'
-                '        raise ValueError("Independent release evidence revoked after confirmation")\n'
-                '    return {"fixture": "OFFLINE SIMULATION ONLY"}\n')
+            # Keep the actual authenticated API, manifest and artifact verifier.
+            with (root / 'scripts/release_evidence.py').open('a') as stream:
+                stream.write("\n_original_verify = verify\ndef verify():\n    if (ROOT / 'late-evidence-revoked').exists(): raise ValueError('Evidence revoked')\n    return _original_verify()\n")
+            import zipfile, importlib.util
+            spec = importlib.util.spec_from_file_location('fixture_build', ROOT / 'scripts/build-release.py')
+            builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
+            producer = root / (artifact.SLUG + '.zip')
+            builder.build_zip(root / 'src', producer, artifact.SLUG, root / 'readme.txt')
+            (root / 'producer.zip').write_bytes(producer.read_bytes())
+            artifact.create(producer, root / 'release-receipt.json', 'a' * 40, VERSION)
+            (root / (artifact.SLUG + '.zip.sha256')).write_text(artifact.digest(producer.read_bytes()) + '  dist/' + artifact.SLUG + '.zip\n')
+            with zipfile.ZipFile(root / 'bundle.zip', 'w') as bundle:
+                for name in [artifact.SLUG + '.zip', artifact.SLUG + '.zip.sha256', 'release-receipt.json']:
+                    bundle.write(root / name, name)
             (root / 'site/sitecustomize.py').write_text('from task09_release_backend import install\ninstall()\n')
             wrapper = f'''#!{sys.executable}
 import sys, runpy
@@ -69,7 +76,7 @@ else: sys.exit(command(name, sys.argv[1:]))
             def executable(path, command):
                 path.write_text(f'#!/bin/bash\nexec "{root}/bin/python3" "{root}/dispatch.py" {command}\n'); path.chmod(0o700)
             (root / 'dispatch.py').write_text('import sys\nfrom task09_release_backend import command\nraise SystemExit(command(sys.argv[1], sys.argv[2:]))\n')
-            for path, command in [('scripts/semgrep-check.sh','semgrep'), ('scripts/integration-test.sh','integration'), ('scripts/cloudflare-integration-test.sh','provider')]: executable(root / path, command)
+            for path, command in [('scripts/semgrep-check.sh','semgrep')]: executable(root / path, command)
             (root / 'scripts/gitleaks-check.py').write_text('from task09_release_backend import command\nraise SystemExit(command("gitleaks", []))\n')
             (root / 'vendor/bin/phpcs').write_text('#!/bin/bash\nexit 0\n'); (root / 'vendor/bin/phpcs').chmod(0o700)
             requested = '1.3.9' if scenario == 'requested_version' else VERSION
@@ -85,9 +92,12 @@ commit_wordpress_release() {{ python3 "{root}/dispatch.py" simulated-publisher "
 release_main publish {requested}
 '''
             env = dict(os.environ, PATH=str(root / 'bin') + ':/usr/bin:/bin',
-                       PYTHONPATH=str(root / 'site') + os.pathsep + str(FIXTURES), TASK09_FIXTURE_ROOT=str(root), TASK09_SCENARIO=scenario, TASK09_VERSION=VERSION)
+                       PYTHONPATH=str(root / 'site') + os.pathsep + str(FIXTURES), TASK09_FIXTURE_ROOT=str(root), TASK09_SCENARIO=scenario, TASK09_VERSION=VERSION, GH_TOKEN='offline-placeholder', GREY_ROCK_RELEASE_RUN_ID='4', GREY_ROCK_RELEASE_RUN_ATTEMPT='1')
+            if scenario == 'missing_auth':
+                env.pop('GH_TOKEN', None); env.pop('GITHUB_TOKEN', None)
             result = subprocess.run(['bash', '-c', driver], cwd=root, env=env, capture_output=True, text=True, timeout=25)
             events = [json.loads(line) for line in (root / 'events.jsonl').read_text().splitlines()] if (root / 'events.jsonl').exists() else []
+            self.assertFalse([e for e in events if e.get('name') in {'make','semgrep','gitleaks','integration','provider','docker','sudo'}], 'SVN-only path reran validation')
             self.assertFalse([e for e in events if e['effect'] == 'FORBIDDEN'], 'A forbidden real-write/service primitive was requested')
             submitted = [e for e in events if e['effect'] == 'SIMULATED_SUBMISSION']
             if scenario == 'valid':
@@ -106,7 +116,7 @@ release_main publish {requested}
         self.run_case('valid')
 
     def test_all_failure_boundaries_prohibit_publication(self):
-        for scenario in ['atomic_unresolved','missing_security','failed_check','semgrep_failure','gitleaks_failure','incomplete_audit','integration_failure','provider_failure','commit_mismatch','wrong_tag','workflow_identity','requested_version','release_version','missing_local_artifact','missing_artifact','checksum_mismatch','zip_mismatch','paired_replacement','stale_artifact','replaced_local','replaced_receipt','late_gate_failure','svn_origin','svn_unavailable']:
+        for scenario in ['missing_auth','missing_check','missing_security','failed_check','commit_mismatch','wrong_tag','workflow_identity','requested_version','release_version','missing_artifact','checksum_mismatch','zip_mismatch','paired_replacement','stale_artifact','late_gate_failure','svn_origin','svn_unavailable','bundle_mismatch','expired_artifact']:
             with self.subTest(scenario=scenario): self.run_case(scenario)
 
 
@@ -122,3 +132,138 @@ class ArtifactAndPinPolicy(unittest.TestCase):
             for reference in ['actions/checkout@v6', 'actions/checkout@'+'0'*40, 'docker://image:latest']:
                 (root / '.github/workflows/test.yaml').write_text('steps: [{ uses: "'+reference+'" }]\n')
                 self.assertTrue(action_pins.validate(root)[0])
+
+
+class LocalSvnTransactions(unittest.TestCase):
+    """Exercise the production SVN adapter against file:// repositories only."""
+    def setUp(self):
+        if not shutil.which('svnadmin'):
+            self.skipTest('Local SVN fixture requires svnadmin')
+        self.temporary = tempfile.TemporaryDirectory(prefix='greyrock-local-svn-')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.repo = self.root / 'repository'
+        self.wc = self.root / 'working'
+        self.url = self.repo.as_uri()
+        self.run_command(['svnadmin', 'create', str(self.repo)])
+        self.run_command(['svn', 'mkdir', self.url + '/trunk', self.url + '/tags', self.url + '/assets', '-m', 'Fixture only'])
+        self.run_command(['svn', 'checkout', self.url, str(self.wc)])
+        # Track an obsolete file to prove scheduled deletions and additions.
+        (self.wc / 'trunk/obsolete.txt').write_text('old')
+        self.run_command(['svn', 'add', str(self.wc / 'trunk/obsolete.txt')])
+        self.run_command(['svn', 'commit', str(self.wc), '-m', 'Fixture old file'])
+        self.archive = self.root / 'candidate.zip'
+        self.receipt = self.root / 'receipt.json'
+        self.archive.write_bytes(__import__('test_task09_artifact_identity').ArtifactIdentity().archive())
+        self.digest = artifact.create(self.archive, self.receipt, 'a' * 40, VERSION)
+        self.source = artifact.extract(self.archive, self.receipt, self.digest, 'a' * 40, VERSION, self.root / 'extracted')
+        self.state = self.root / 'state'; self.state.mkdir()
+        (self.state / 'github-evidence.json').write_text(json.dumps({'commit': 'a' * 40, 'version': VERSION}))
+        self.bin = self.root / 'bin'; self.bin.mkdir()
+        # Only the local repository URL and local paths can reach real svn.
+        (self.bin / 'svn').write_text('''#!/usr/bin/env python3
+import os, subprocess, sys
+from pathlib import Path
+args = sys.argv[1:]
+root = os.environ['LOCAL_SVN_ROOT']
+if any('://' in a and not a.startswith('file://' + root + '/') for a in args):
+    raise SystemExit('Fixture denies external SVN destinations')
+with open(root + '/commands.log', 'a') as log: log.write(' '.join(args) + '\\n')
+mode = os.environ.get('LOCAL_SVN_FAILURE')
+if mode == 'commit' and args[0] == 'commit': raise SystemExit(42)
+if mode == 'export' and args[0] == 'export': raise SystemExit(43)
+raise SystemExit(subprocess.call(['/usr/bin/svn', *args]))
+''')
+        (self.bin / 'svn').chmod(0o700)
+
+    def run_command(self, args):
+        return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+
+    def shell(self, operation, failure=''):
+        script = f'''set -Eeuo pipefail
+source "{ROOT}/scripts/release-plugin.sh"
+cd "{ROOT}"
+VERSION={VERSION}
+WPORG_SVN_WORKING_COPY="{self.wc}"
+WPORG_SVN_URL="{self.url}"
+EXPECTED_SVN_URL="{self.url}"
+WPORG_SVN_CONFIG_DIR="{self.root}/config"
+WPORG_SVN_USERNAME=fixture
+PUBLICATION_SOURCE="{self.source}"
+CANDIDATE_ARCHIVE="{self.archive}"
+CANDIDATE_RECEIPT="{self.receipt}"
+CANDIDATE_RECEIPT_SHA={self.digest}
+CANDIDATE_COMMIT={'a' * 40}
+STATE_DIR="{self.state}"
+TEMP_DIR="{self.root}/remote"
+mkdir -p "$TEMP_DIR"
+verify_release_readiness() {{ :; }}
+verify_release_candidate() {{ :; }}
+{operation}
+'''
+        return subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=20,
+            env=dict(os.environ, PATH=str(self.bin) + ':/usr/bin:/bin', LOCAL_SVN_ROOT=str(self.root), LOCAL_SVN_FAILURE=failure))
+
+    def test_commit_exact_tree_and_idempotent_remote_verification(self):
+        result = self.shell('commit_wordpress_release')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.wc / 'trunk/obsolete.txt').exists())
+        receipt = json.loads((self.state / 'svn-verified.json').read_text())
+        self.assertEqual(receipt['svn_revision'], 3)
+        # Existing tags prohibit a new commit; verification alone can resume.
+        denied = self.shell('commit_wordpress_release')
+        self.assertNotEqual(denied.returncode, 0)
+        shutil.rmtree(self.root / 'remote')
+        verified = self.shell('verify_remote_svn')
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertEqual(self.run_command(['svnlook', 'youngest', str(self.repo)]).strip(), '3')
+        # An ambiguous commit may leave a dirty WC. Read-only remote recovery
+        # must still work, while publishing must continue to reject dirt.
+        (self.wc / 'assets/operator-note.txt').write_text('preserve')
+        (self.root / 'svn.env').write_text('# Fixture variables already assigned\n')
+        shutil.rmtree(self.root / 'remote')
+        recovered_dirty = self.shell(f'MODE=remote-verify\nRELEASE_CONFIG="{self.root}/svn.env"\nload_and_verify_svn_configuration\nverify_remote_svn')
+        self.assertEqual(recovered_dirty.returncode, 0, recovered_dirty.stderr)
+        self.assertEqual((self.wc / 'assets/operator-note.txt').read_text(), 'preserve')
+
+    def test_transaction_failure_and_post_commit_recovery(self):
+        failed = self.shell('commit_wordpress_release', 'commit')
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertFalse((self.state / 'svn-committed.json').exists())
+        self.assertEqual(self.run_command(['svnlook', 'youngest', str(self.repo)]).strip(), '2')
+        self.run_command(['svn', 'revert', '-R', str(self.wc)])
+        for path in [self.wc / 'tags' / VERSION]:
+            if path.exists(): shutil.rmtree(path)
+        # Clean unversioned additions left by uncertain transaction deliberately.
+        for path in (self.wc / 'trunk').iterdir():
+            if path.name != 'obsolete.txt':
+                shutil.rmtree(path) if path.is_dir() else path.unlink()
+        result = self.shell('commit_wordpress_release', 'export')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('POST_COMMIT_VERIFICATION_FAILED', result.stderr)
+        self.assertTrue((self.state / 'svn-committed.json').exists())
+        self.assertFalse((self.state / 'svn-verified.json').exists())
+        recovered = self.shell('verify_remote_svn')
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(self.run_command(['svnlook', 'youngest', str(self.repo)]).strip(), '3')
+
+    def test_dirty_tree_and_wrong_destination_block_before_commit(self):
+        (self.wc / 'assets/user.txt').write_text('preserve')
+        result = self.shell('commit_wordpress_release')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.wc / 'assets/user.txt').read_text(), 'preserve')
+        self.assertEqual(self.run_command(['svnlook', 'youngest', str(self.repo)]).strip(), '2')
+
+    def test_translation_properties_fail_before_release_commit(self):
+        self.run_command(['svn', 'update', str(self.wc)])
+        self.run_command(['svn', 'propset', 'svn:keywords', 'Id', str(self.wc / 'trunk/obsolete.txt')])
+        self.run_command(['svn', 'commit', str(self.wc), '-m', 'Fixture property'])
+        self.run_command(['svn', 'update', str(self.wc)])
+        # A tree property survives directory synchronisation; externals could
+        # otherwise change what the resulting remote release means.
+        self.run_command(['svn', 'propset', 'svn:externals', '^/assets external-assets', str(self.wc / 'trunk')])
+        self.run_command(['svn', 'commit', str(self.wc), '-m', 'Fixture externals'])
+        before = self.run_command(['svnlook', 'youngest', str(self.repo)]).strip()
+        result = self.shell('commit_wordpress_release')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.run_command(['svnlook', 'youngest', str(self.repo)]).strip(), before)

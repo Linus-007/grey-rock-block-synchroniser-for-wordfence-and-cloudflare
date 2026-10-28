@@ -65,7 +65,7 @@ final class BlockOwnership {
     }
 
     $table = $wpdb->prefix . self::TABLE;
-    $now = current_time('mysql');
+    $now = AtomicFence::mysql_time();
 
     $result = $wpdb->query(
       $wpdb->prepare(

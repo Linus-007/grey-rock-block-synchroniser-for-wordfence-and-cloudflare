@@ -32,7 +32,7 @@ namespace {
   $network = [];
   function plugin_dir_path($file): string { return dirname($file) . '/'; }
   function plugin_dir_url($file): string { return 'https://example.invalid/plugin/'; }
-  function plugin_basename($file): string { return 'greyrock/plugin.php'; }
+  function plugin_basename($file): string { return substr($file, strlen(dirname(__DIR__, 2)) + 1); }
   function get_file_data($file, $headers): array { return ['Version' => '1.3.11']; }
   function is_multisite(): bool { return true; }
   function get_current_network_id(): int { return 1; }
@@ -61,7 +61,7 @@ function get_sites($args): array { return [1, 2, 3]; }
   lifecycle_assert(SyncScheduler::$registered === [1], 'Site-only activation crossed site boundaries.');
   Plugin::initialize_new_site(new WP_Site(5), []);
   lifecycle_assert(MigrationManager::$sites === [1, 2, 3], 'Inactive network initialized a new site.');
-  $network['active_sitewide_plugins'] = ['greyrock/plugin.php' => time()];
+  $network['active_sitewide_plugins'] = ['src/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.php' => time()];
   Plugin::initialize_new_site(new WP_Site(4), []);
   lifecycle_assert(end(MigrationManager::$sites) === 4, 'New network site not migrated.');
   lifecycle_assert($blog === 1 && $stack === [], 'New-site initialization leaked context.');

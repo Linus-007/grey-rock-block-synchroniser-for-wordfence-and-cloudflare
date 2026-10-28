@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - id: policy
+      - name: Resolve supported runtime matrix
+        id: policy
         run: echo "matrix=$(python3 scripts/php-runtime.py --matrix)" >> "$GITHUB_OUTPUT"
 
   wordpress-integration:

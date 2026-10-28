@@ -44,36 +44,46 @@ def archive_bytes():
 def urlopen(request, **kwargs):
     url = request.full_url if hasattr(request, 'full_url') else request
     log({'effect': 'mock-http', 'path': url.split('github.com/', 1)[-1].split('?', 1)[0]})
-    if url.startswith('https://api.github.com/repos/' + REPOSITORY + '/actions/runs'):
-        if '/jobs' in url:
-            names = ['WordPress security checks', 'Semgrep CE SAST', 'Gitleaks secret scan', 'PHP compatibility', 'WordPress integration test']
-            jobs = [{'name': n, 'status': 'completed', 'conclusion': 'failure' if scenario() == 'failed_check' and n == 'Gitleaks secret scan' else 'success', 'head_sha': COMMIT} for n in names]
-            value = {'total_count': len(jobs), 'jobs': jobs}
-        else:
-            rows = [{'id': i, 'name': n, 'path': '.github/workflows/' + p, 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'main', 'run_number': 10, 'status': 'completed', 'conclusion': 'success'} for i, (n, p) in enumerate([('Application Security', 'security.yml'), ('Continuous Integration', 'ci.yml'), ('WordPress Integration', 'integration.yml')], 1)]
-            if scenario() == 'missing_security':
-                rows = rows[1:]
-            rows.append({'id': 4, 'name': 'Build and Release Plugin', 'path': '.github/workflows/' + ('other.yml' if scenario() == 'workflow_identity' else 'release.yml'), 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'v' + VERSION, 'run_number': 10, 'status': 'completed', 'conclusion': 'success'})
-            value = {'workflow_runs': rows}
+    import re
+    def response(value):
         return io.BytesIO(json.dumps(value).encode())
+    if '/actions/artifacts/90/zip' in url:
+        return io.BytesIO((root() / 'bundle.zip').read_bytes() + (b'bad' if scenario() == 'bundle_mismatch' else b''))
+    if '/actions/runs/4/artifacts' in url:
+        return response({'total_count': 1, 'artifacts': [{'id': 90, 'name': 'validated-release', 'workflow_run': {'id': 4, 'head_sha': COMMIT}, 'expired': scenario() == 'expired_artifact', 'digest': 'sha256:' + hashlib.sha256((root() / 'bundle.zip').read_bytes()).hexdigest()}]})
+    if url.startswith('https://api.github.com/repos/' + REPOSITORY + '/actions/runs'):
+        from release_evidence import MAIN_WORKFLOWS, required_controls
+        if '/jobs' in url:
+            run_id = int(re.search(r'/runs/(\d+)', url)[1])
+            if run_id == 4:
+                controls = required_controls(['8.2', '8.3', '8.4', '8.5'])
+                jobs = [{'id': i + 40, 'run_id': 4, 'name': ('integration-gates' if n in {'runtime-policy', 'Mandatory real InnoDB concurrency'} or n.startswith('Security runtime') else 'security-gates') + ' / ' + n,
+                         'head_sha': COMMIT, 'status': 'completed', 'conclusion': 'success', 'steps': [{'name': step, 'conclusion': 'success'}]} for i, (n, step) in enumerate(controls.items())]
+            else:
+                names = list(MAIN_WORKFLOWS.values())[run_id - 1][1]
+                jobs = [{'id': i + run_id * 100, 'run_id': run_id, 'name': n, 'status': 'completed', 'conclusion': 'failure' if scenario() == 'failed_check' and n == 'Gitleaks secret scan' else 'success', 'head_sha': COMMIT} for i, n in enumerate(sorted(names))]
+            if scenario() == 'missing_check': jobs = jobs[:-1]
+            return response({'total_count': len(jobs), 'jobs': jobs})
+        rows = [{'id': i, 'name': n, 'path': p, 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'main', 'run_number': 10, 'run_attempt': 1, 'status': 'completed', 'conclusion': 'success'} for i, (n, (p, _)) in enumerate(MAIN_WORKFLOWS.items(), 1)]
+        if scenario() == 'missing_security': rows = rows[1:]
+        release_run = {'id': 4, 'run_attempt': 1, 'name': 'Build and Release Plugin', 'path': '.github/workflows/' + ('other.yml' if scenario() == 'workflow_identity' else 'release.yml'), 'head_sha': COMMIT, 'event': 'push', 'head_branch': 'v' + VERSION, 'run_number': 10, 'status': 'completed', 'conclusion': 'success'}
+        if '/runs/4?' in url or url.endswith('/runs/4'): return response(release_run)
+        rows.append(release_run)
+        return response({'total_count': len(rows), 'workflow_runs': rows})
     if url.startswith('https://api.github.com/repos/' + REPOSITORY + '/git/ref/tags/'):
         return io.BytesIO(json.dumps({'object': {'type': 'commit', 'sha': 'b' * 40 if scenario() == 'wrong_tag' else COMMIT}}).encode())
-    if '/releases/tags/' in url and url.startswith('https://api.github.com/repos/' + REPOSITORY + '/'):
-        names = [SLUG + '.zip', SLUG + '.zip.sha256', 'release-receipt.json']
-        if scenario() == 'missing_artifact':
-            names = names[1:]
-        return io.BytesIO(json.dumps({'tag_name': 'v1.3.9' if scenario() == 'release_version' else 'v' + VERSION, 'draft': False, 'prerelease': False, 'assets': [{'name': n, 'browser_download_url': f'https://github.com/{REPOSITORY}/releases/download/v{VERSION}/{n}'} for n in names]}).encode())
-    prefix = f'https://github.com/{REPOSITORY}/releases/download/v{VERSION}/'
-    if url.startswith(prefix):
-        name = url[len(prefix):]
-        data = archive_bytes()
-        if name == SLUG + '.zip':
-            return io.BytesIO(data)
-        if name == SLUG + '.zip.sha256':
-            checksum = '0' * 64 if scenario() == 'checksum_mismatch' else hashlib.sha256(data).hexdigest()
-            return io.BytesIO((checksum + '  dist/' + SLUG + '.zip\n').encode())
-        if name == 'release-receipt.json':
-            return io.BytesIO(json.dumps({'commit': COMMIT, 'version': VERSION, 'tag': 'v' + VERSION, 'archive_sha256': hashlib.sha256(data).hexdigest()}).encode())
+    names = [SLUG + '.zip', SLUG + '.zip.sha256', 'release-receipt.json']
+    if '/releases/tags/' in url:
+        return response({'id': 50, 'tag_name': 'v1.3.9' if scenario() == 'release_version' else 'v' + VERSION, 'draft': False, 'prerelease': False})
+    if '/releases/50/assets?' in url:
+        selected = names[1:] if scenario() == 'missing_artifact' else names
+        return response([{'id': names.index(n) + 60, 'name': n, 'state': 'uploaded'} for n in selected])
+    if '/releases/assets/' in url:
+        number = int(url.rsplit('/', 1)[1]) - 60
+        data = (root() / names[number]).read_bytes()
+        if scenario() in {'zip_mismatch', 'paired_replacement', 'stale_artifact'} and number == 0: data = archive_bytes()
+        if scenario() == 'checksum_mismatch' and number == 1: data = b'0' * 64 + ('  dist/' + SLUG + '.zip\n').encode()
+        return io.BytesIO(data)
     raise RuntimeError('OFFLINE DENIAL: unexpected network request')
 
 
@@ -95,6 +105,8 @@ def command(name, args):
     if name == 'git':
         if args[:2] == ['branch', '--show-current']: print('main')
         elif args[:3] == ['remote', 'get-url', 'fork']: print('git@github.com:' + REPOSITORY + '.git')
+        elif args and args[0] == 'tag': print('v1.3.11\nv1.3.12\nv1.3.13')
+        elif args and args[0] == 'diff': pass
         elif args and args[0] == 'status': pass
         elif args and args[0] == 'fetch': pass  # simulated read, no real ref update
         elif args and args[0] == 'rev-parse': print('b' * 40 if scenario() == 'commit_mismatch' and 'refs/remotes/fork/main' in args else COMMIT)
@@ -104,7 +116,7 @@ def command(name, args):
         if args and args[0] == 'status': return 0
         if args[:3] == ['info', '--show-item', 'url']:
             print('https://plugins.svn.wordpress.org/' + ('unexpected' if scenario() == 'svn_origin' else SLUG)); return 0
-        if args and args[0] == 'info': return 0
+        if args and args[0] == 'info': return 1 if '/tags/' in args[-1] else 0
         if args and args[0] == 'ls':
             if scenario() == 'svn_unavailable': return 1
             print('<lists><list/></lists>'); return 0

@@ -236,7 +236,9 @@ final class SyncScheduler {
 
       return $success;
     } catch (\Throwable) {
-      self::$lastErrorMessage = __('Synchronization stopped after an unexpected dependency failure. Retry after checking service and database health.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+      if (self::$lastErrorMessage === '') {
+        self::$lastErrorMessage = __('Synchronization stopped after an unexpected dependency failure. Retry after checking service and database health.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+      }
       self::persist_failure_if_owned();
       return false;
     } finally {
@@ -501,6 +503,7 @@ final class SyncScheduler {
   }
 
   private static function execute_sync(): bool {
+    global $wpdb;
     $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
     $zone = $options['cloudflare_zone_id'] ?? '';
@@ -621,9 +624,9 @@ final class SyncScheduler {
 
     $blocks = \wfBlock::ipBlocks(true);
 
-    if (!is_array($blocks)) {
+    if (!is_array($blocks) || ($wpdb->last_error ?? '') !== '') {
       self::$lastErrorMessage = __(
-        'Wordfence returned an unexpected active-block response.',
+        'Wordfence current IP-block evidence could not be read completely.',
         'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
       );
 
@@ -640,6 +643,7 @@ final class SyncScheduler {
      */
     $batch_by_ip = [];
     $wordfence_owned_ips = [];
+    $active_ips = [];
 
     foreach ($blocks as $block) {
       if (!$block instanceof \wfBlock) {
@@ -661,10 +665,8 @@ final class SyncScheduler {
       $is_permanent = (
         $expiration === \wfBlock::DURATION_FOREVER
       );
-      $evidence_watermark = max(
-        BlockLogger::get_synced_timestamp($ip),
-        ResetWatermarkStore::get($ip)
-      );
+      $reset_watermark = ResetWatermarkStore::get($ip);
+      $evidence_watermark = max(BlockLogger::get_synced_timestamp($ip), $reset_watermark);
 
       if ($reason === '') {
         $reason = __(
@@ -684,7 +686,7 @@ final class SyncScheduler {
         || (
           !$is_permanent
           && $expiration > 0
-          && time() > $expiration
+          && time() >= $expiration
         )
         || isset($allowed_ips[$ip])
       ) {
@@ -715,6 +717,11 @@ final class SyncScheduler {
         }
       }
 
+      if ($block_type === \wfBlock::TYPE_RATE_THROTTLE) {
+        if ($record_local) { self::audit($ip, 'skip', 'Wordfence throttle is not an IP block', $blocked_time); }
+        continue;
+      }
+      $active_ips[$ip] = true;
       $expires_at = null;
 
       if (!$is_permanent && $expiration > 0) {
@@ -729,31 +736,25 @@ final class SyncScheduler {
         $wordfence_owned_ips[$ip] = true;
       }
 
-      /*
-       * Ownership above represents current desired state even when this
-       * synchronization episode requires no Cloudflare API operation.
-       */
-      if (
-        (
-          $mode === 'account_list'
-            ? (
-              self::should_skip_present_account_list_ip(
-                isset($cloudflare_set[$ip]),
-                BlockLogger::has_synced($ip)
-              )
-              || (
-                $evidence_watermark > 0
-                && !self::active_evidence_is_newer(
-                  $blocked_time,
-                  $evidence_watermark
-                )
-              )
-            )
-            : BlockLogger::has_synced($ip)
-        )
-        || BlockLogger::is_blacklisted($ip)
-      ) {
+      // Complete inventory is the membership authority. A present entry
+      // still needs local attribution and its current expiration refreshed.
+      $suppressed = $mode === 'account_list'
+        ? (($reset_watermark > 0 && !self::active_evidence_is_newer($blocked_time, $reset_watermark))
+          || (!isset($cloudflare_set[$ip]) && $evidence_watermark > 0
+            && !self::active_evidence_is_newer($blocked_time, $evidence_watermark)))
+        : BlockLogger::has_synced($ip);
+      // The retry limit bounds mutations. Proven present membership can
+      // recover failed local state without another Cloudflare mutation.
+      $retry_limited = BlockLogger::is_blacklisted($ip)
+        && !($mode === 'account_list' && isset($cloudflare_set[$ip]));
+      if ($suppressed || $retry_limited) {
+        if ($record_local) {
+          self::audit($ip, 'skip', $suppressed ? 'active evidence already handled or reset' : 'retry limit reached', $blocked_time);
+        }
         continue;
+      }
+      if ($record_local) {
+        self::audit($ip, 'detection', 'current Wordfence IP block', $blocked_time);
       }
 
       $batch_by_ip[$ip] = [
@@ -761,6 +762,8 @@ final class SyncScheduler {
         'reason' => (string) $reason,
         'expires_at' => $expires_at,
         'record_local' => $record_local,
+        'evidence' => $blocked_time,
+        'present' => isset($cloudflare_set[$ip]),
       ];
     }
 
@@ -772,10 +775,25 @@ final class SyncScheduler {
       $options['historical_minimum_events'] ?? 1
     );
 
+    $historical_audit = [];
     $historical_blocks = HistoricalBlockReader::get_candidates(
       $lookback_hours,
       $minimum_events,
-      self::get_site_hosts()
+      self::get_site_hosts(),
+      [],
+      $active_ips,
+      static function (string $ip, string $outcome, string $reason, int $evidence, int $source_id = 0) use (&$historical_audit, $allowed_ips): void {
+        if (isset($allowed_ips[$ip])) { $outcome = 'skip'; $reason = 'trusted address excluded from forwarding'; }
+        $historical_audit[] = [$ip, $outcome, $reason, $evidence, $source_id];
+        if (count($historical_audit) >= 50 && class_exists(AuditLog::class)) {
+          try { AuditLog::record_many($historical_audit); }
+          catch (\RuntimeException $error) {
+            self::$lastErrorMessage = __('Historical audit persistence failed; synchronisation is incomplete.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+            throw $error;
+          }
+          $historical_audit = [];
+        }
+      }
     );
 
     if ($historical_blocks === null) {
@@ -784,6 +802,14 @@ final class SyncScheduler {
         'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
       );
       return false;
+    }
+
+    if (class_exists(AuditLog::class)) {
+      try { AuditLog::record_many($historical_audit); }
+      catch (\RuntimeException $error) {
+        self::$lastErrorMessage = __('Historical audit persistence failed; synchronisation is incomplete.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+        throw $error;
+      }
     }
 
     foreach ($historical_blocks as $historical_block) {
@@ -800,6 +826,7 @@ final class SyncScheduler {
         || !IpValidator::validate_public_ip($ip)
         || isset($allowed_ips[$ip])
       ) {
+        self::audit($ip, 'skip', 'invalid or trusted address', $latest_event);
         continue;
       }
 
@@ -810,18 +837,20 @@ final class SyncScheduler {
        */
       $wordfence_owned_ips[$ip] = true;
 
-      if (
-        isset($batch_by_ip[$ip])
-        || (
-          $mode === 'account_list'
-            ? self::should_skip_present_account_list_ip(
-              isset($cloudflare_set[$ip]),
-              BlockLogger::has_synced($ip)
-            )
-            : BlockLogger::has_synced($ip)
-        )
-        || BlockLogger::is_blacklisted($ip)
-      ) {
+      if (isset($batch_by_ip[$ip]) || isset($active_ips[$ip])) {
+        if (isset($batch_by_ip[$ip])) { $batch_by_ip[$ip]['record_local'] = true; }
+        self::audit($ip, 'skip', 'historical evidence covered by current IP block', $latest_event);
+        continue;
+      }
+      $suppressed = $mode === 'account_list'
+        ? (!isset($cloudflare_set[$ip]) && $latest_event <= BlockLogger::get_synced_timestamp($ip))
+        : BlockLogger::has_synced($ip);
+      // The retry limit bounds mutations. Proven present membership can
+      // recover failed local state without another Cloudflare mutation.
+      $retry_limited = BlockLogger::is_blacklisted($ip)
+        && !($mode === 'account_list' && isset($cloudflare_set[$ip]));
+      if ($suppressed || $retry_limited) {
+        self::audit($ip, 'skip', $suppressed ? 'historical evidence already handled; no newer evidence' : 'retry limit reached', $latest_event);
         continue;
       }
 
@@ -840,6 +869,8 @@ final class SyncScheduler {
       $batch_by_ip[$ip] = [
         'ip' => $ip,
         'record_local' => true,
+        'evidence' => $latest_event,
+        'present' => isset($cloudflare_set[$ip]),
         'reason' => sprintf(
           /* translators: %d: number of blocked WAF events */
           _n(
@@ -917,7 +948,7 @@ final class SyncScheduler {
     self::assert_active_lease();
     AtomicFence::run(static fn () => AtomicFence::option(
       'firewall_sync_last_run', false, true,
-      current_time('mysql')
+      AtomicFence::mysql_time()
     ), [], true);
 
     if (!empty($failed)) {
@@ -975,6 +1006,18 @@ final class SyncScheduler {
     return true;
   }
 
+  private static function audit(string $ip, string $outcome, string $reason, int $evidence, int $source_id = 0): void {
+    // Isolated legacy unit harnesses load services individually. The plugin
+    // autoloader always supplies this service in WordPress.
+    if (class_exists(AuditLog::class)) {
+      try { AuditLog::record($ip, $outcome, $reason, $evidence, $source_id); }
+      catch (\RuntimeException $error) {
+        self::$lastErrorMessage = __('Historical audit persistence failed; synchronisation is incomplete.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare');
+        throw $error;
+      }
+    }
+  }
+
   /** @return array<int, string> */
   private static function get_site_hosts(): array {
     $hosts = [];
@@ -1011,18 +1054,6 @@ final class SyncScheduler {
     return $blocked_time > 0 && $blocked_time > $watermark;
   }
 
-  private static function should_skip_present_account_list_ip(
-    bool $cloudflare_present,
-    bool $site_has_synced
-  ): bool {
-    /*
-     * Shared-list membership may have been created by another site. Only a
-     * site that already owns an attributable successful row suppresses a
-     * repeat episode while that shared Cloudflare entry remains present.
-     */
-    return $cloudflare_present && $site_has_synced;
-  }
-
   private static function synchronize_account_list_batch(
     Client $client,
     string $account_id,
@@ -1053,6 +1084,7 @@ final class SyncScheduler {
       $log_reason = 'sync: ' . $entry['reason'];
 
       if (in_array($entry['ip'], $failed, true)) {
+        if ($record_local) { self::audit($entry['ip'], 'failure', 'Cloudflare operation failed or is unresolved', (int) ($entry['evidence'] ?? 0)); }
         if (
           $record_local
           && !BlockLogger::mark_failed(
@@ -1079,13 +1111,12 @@ final class SyncScheduler {
         continue;
       }
 
-      if (
-        !BlockLogger::log(
-          $entry['ip'],
-          $log_reason,
-          $entry['expires_at']
-        )
-      ) {
+      try {
+        $state_stored = BlockLogger::log($entry['ip'], $log_reason, $entry['expires_at']);
+      } catch (\RuntimeException) {
+        $state_stored = false;
+      }
+      if (!$state_stored) {
         self::$lastErrorMessage = sprintf(
           /* translators: %s: IP address. */
           __(
@@ -1095,6 +1126,7 @@ final class SyncScheduler {
           $entry['ip']
         );
 
+        self::audit($entry['ip'], 'failure', 'Cloudflare succeeded; local state could not be stored', (int) ($entry['evidence'] ?? 0));
         if (!in_array($entry['ip'], $failed, true)) {
           $failed[] = $entry['ip'];
         }
@@ -1102,6 +1134,7 @@ final class SyncScheduler {
         continue;
       }
 
+      self::audit($entry['ip'], 'success', !empty($entry['present']) ? 'Cloudflare membership confirmed; local state refreshed' : 'Cloudflare membership established; local state stored', (int) ($entry['evidence'] ?? 0));
       if (!is_multisite() || !Config::uses_network_options()) {
         ResetWatermarkStore::clear($entry['ip']);
       }

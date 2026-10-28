@@ -8,6 +8,8 @@
 namespace WPCF\FirewallSync\Services;
 final class AtomicFence {
   private static int $depth = 0;
+  public static function read_configuration(string $key, bool $network) { return $network ? get_site_option($key, []) : get_option($key, []); }
+  public static function mysql_time(): string { return \current_time('mysql'); }
   public static function active(): bool { return self::$depth > 0; }
   public static function locked(): bool { return false; }
   public static function run(callable $work, array $tables = [], bool $site_only = false) {
