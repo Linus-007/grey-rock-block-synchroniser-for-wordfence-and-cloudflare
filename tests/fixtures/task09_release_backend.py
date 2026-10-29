@@ -48,9 +48,17 @@ def urlopen(request, **kwargs):
     def response(value):
         return io.BytesIO(json.dumps(value).encode())
     if '/actions/artifacts/90/zip' in url:
+        if request.get_header('Accept') != 'application/json':
+            raise AssertionError('Actions artifact ZIP must accept application/json')
+        if scenario() in {'artifact_http_415', 'artifact_http_404'}:
+            from urllib.error import HTTPError
+            code = 415 if scenario() == 'artifact_http_415' else 404
+            raise HTTPError(url, code, 'Rejected artifact request', {}, None)
+        if scenario() == 'artifact_json_error':
+            return response({'message': 'Artifact download failed'})
         return io.BytesIO((root() / 'bundle.zip').read_bytes() + (b'bad' if scenario() == 'bundle_mismatch' else b''))
     if '/actions/runs/4/artifacts' in url:
-        return response({'total_count': 1, 'artifacts': [{'id': 90, 'name': 'validated-release', 'workflow_run': {'id': 4, 'head_sha': COMMIT}, 'expired': scenario() == 'expired_artifact', 'digest': 'sha256:' + hashlib.sha256((root() / 'bundle.zip').read_bytes()).hexdigest()}]})
+        return response({'total_count': 1, 'artifacts': [{'id': 90, 'name': 'validated-release', 'workflow_run': {'id': 5 if scenario() == 'artifact_wrong_run' else 4, 'head_sha': 'b' * 40 if scenario() == 'artifact_wrong_source' else COMMIT}, 'expired': scenario() == 'expired_artifact', 'digest': '' if scenario() == 'artifact_missing_digest' else 'sha256:' + hashlib.sha256((root() / 'bundle.zip').read_bytes()).hexdigest()}]})
     if url.startswith('https://api.github.com/repos/' + REPOSITORY + '/actions/runs'):
         from release_evidence import MAIN_WORKFLOWS, required_controls
         if '/jobs' in url:
@@ -79,6 +87,11 @@ def urlopen(request, **kwargs):
         selected = names[1:] if scenario() == 'missing_artifact' else names
         return response([{'id': names.index(n) + 60, 'name': n, 'state': 'uploaded'} for n in selected])
     if '/releases/assets/' in url:
+        if request.get_header('Accept') != 'application/octet-stream':
+            raise AssertionError('Release assets must retain application/octet-stream')
+        if scenario() == 'asset_http_415':
+            from urllib.error import HTTPError
+            raise HTTPError(url, 415, 'Rejected release asset request', {}, None)
         number = int(url.rsplit('/', 1)[1]) - 60
         data = (root() / names[number]).read_bytes()
         if scenario() in {'zip_mismatch', 'paired_replacement', 'stale_artifact'} and number == 0: data = archive_bytes()

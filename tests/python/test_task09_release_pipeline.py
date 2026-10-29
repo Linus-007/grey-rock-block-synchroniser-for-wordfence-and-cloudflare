@@ -51,6 +51,17 @@ class FullOfflinePublisher(unittest.TestCase):
             (root / 'producer.zip').write_bytes(producer.read_bytes())
             artifact.create(producer, root / 'release-receipt.json', 'a' * 40, VERSION)
             (root / (artifact.SLUG + '.zip.sha256')).write_text(artifact.digest(producer.read_bytes()) + '  dist/' + artifact.SLUG + '.zip\n')
+            # Mutate both producer and public copies so byte equality alone
+            # cannot satisfy the checksum or receipt validation gates.
+            if scenario == 'producer_bad_checksum':
+                (root / (artifact.SLUG + '.zip.sha256')).write_text('0' * 64 + '  dist/' + artifact.SLUG + '.zip\n')
+            if scenario in {'receipt_wrong_commit', 'receipt_wrong_version', 'receipt_wrong_entries'}:
+                receipt_path = root / 'release-receipt.json'
+                receipt = json.loads(receipt_path.read_text())
+                if scenario == 'receipt_wrong_commit': receipt['commit'] = 'b' * 40
+                elif scenario == 'receipt_wrong_version': receipt['version'] = '0.0.0'
+                else: receipt['entries'] = []
+                receipt_path.write_text(json.dumps(receipt))
             with zipfile.ZipFile(root / 'bundle.zip', 'w') as bundle:
                 for name in [artifact.SLUG + '.zip', artifact.SLUG + '.zip.sha256', 'release-receipt.json']:
                     bundle.write(root / name, name)
@@ -110,10 +121,32 @@ release_main publish {requested}
             else:
                 self.assertNotEqual(result.returncode, 0, 'A failed mandatory gate was accepted')
                 self.assertFalse(submitted, 'Publication attempted after a mandatory failure')
+                errors = {
+                    'artifact_http_415': 'HTTP Error 415',
+                    'artifact_http_404': 'HTTP Error 404',
+                    'asset_http_415': 'HTTP Error 415',
+                    'artifact_json_error': 'Immutable producer artifact digest mismatch',
+                    'artifact_wrong_run': 'Artifact belongs to another source or run',
+                    'artifact_wrong_source': 'Artifact belongs to another source or run',
+                    'artifact_missing_digest': 'Independent GitHub artifact digest unavailable',
+                    'producer_bad_checksum': 'Downloaded checksum mismatch',
+                    'receipt_wrong_commit': 'Candidate commit/tag/version mismatch',
+                    'receipt_wrong_version': 'Candidate commit/tag/version mismatch',
+                    'receipt_wrong_entries': 'Complete ZIP contents differ from validated snapshot',
+                }
+                if scenario in errors:
+                    self.assertIn(errors[scenario], result.stderr)
             return result.returncode
 
     def test_complete_offline_decision_and_payload(self):
         self.run_case('valid')
+
+    def test_transport_and_identity_failures_prohibit_publication(self):
+        for scenario in ['artifact_http_415', 'artifact_http_404', 'artifact_json_error',
+                         'asset_http_415', 'artifact_wrong_run', 'artifact_wrong_source',
+                         'artifact_missing_digest', 'producer_bad_checksum',
+                         'receipt_wrong_commit', 'receipt_wrong_version', 'receipt_wrong_entries']:
+            with self.subTest(scenario=scenario): self.run_case(scenario)
 
     def test_all_failure_boundaries_prohibit_publication(self):
         for scenario in ['missing_auth','missing_check','missing_security','failed_check','commit_mismatch','wrong_tag','workflow_identity','requested_version','release_version','missing_artifact','checksum_mismatch','zip_mismatch','paired_replacement','stale_artifact','late_gate_failure','svn_origin','svn_unavailable','bundle_mismatch','expired_artifact']:

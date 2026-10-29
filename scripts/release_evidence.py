@@ -36,9 +36,9 @@ class GitHub:
         if not self.token:
             raise ValueError('Authenticated GitHub API verification requires GH_TOKEN')
 
-    def request(self, path, binary=False):
+    def request(self, path, binary=False, accept=None):
         request = urllib.request.Request('https://api.github.com/repos/' + self.repository + path,
-            headers={'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json',
+            headers={'Accept': accept or ('application/octet-stream' if binary else 'application/vnd.github+json'),
                      'X-GitHub-Api-Version': '2022-11-28'})
         # Artifact downloads redirect to a signed storage URL. Never forward
         # repository credentials to the redirect destination.
@@ -212,14 +212,16 @@ def fetch_release(directory, version, sha):
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', expected):
         raise ValueError('Independent GitHub artifact digest unavailable')
 
-    def download(path):
-        with urllib.request.urlopen(api.request(path, binary=True), timeout=60) as response:
+    def download(path, accept='application/octet-stream'):
+        with urllib.request.urlopen(api.request(path, binary=True, accept=accept), timeout=60) as response:
             data = response.read(LIMIT + 1)
         if len(data) > LIMIT:
             raise ValueError('Downloaded artifact exceeds limit')
         return data
 
-    bundle = download('/actions/artifacts/' + str(artifact['id']) + '/zip')
+    # Actions ZIP negotiation requires JSON even though the redirected body is
+    # binary. Release asset downloads below still require octet-stream.
+    bundle = download('/actions/artifacts/' + str(artifact['id']) + '/zip', accept='application/json')
     if 'sha256:' + hashlib.sha256(bundle).hexdigest() != expected:
         raise ValueError('Immutable producer artifact digest mismatch')
     names = [SLUG + '.zip', SLUG + '.zip.sha256', 'release-receipt.json']
