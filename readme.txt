@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.14
+Stable tag: 1.3.15
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -484,6 +484,11 @@ No.
 
 == Changelog ==
 
+= 1.3.15 =
+* Suppress repeated Historical Audit success confirmations for unchanged Cloudflare membership while continuing to refresh local synchronization timestamps.
+* Retain audit events for membership additions, material reason or expiry changes, newly acquired Wordfence ownership, failure recovery and genuine failures; preserve existing audit history and fail-closed persistence.
+* Add focused regression coverage for repeated confirmations, state transitions, error handling and independent multisite state.
+
 = 1.3.14 =
 * Bound historical result pages and audit buffering, aggregate WAF count/latest time per IP, and separate catalogued same-host multisite paths through WordPress routing.
 
@@ -689,6 +694,9 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.15 =
+Repairs duplicate Historical Audit confirmations for unchanged membership while preserving state refreshes, meaningful transitions, failures and existing audit history.
 
 = 1.3.6 =
 Adds sortable and filterable Synchronisation Logs in Site Admin and Network Admin,
