@@ -23,6 +23,13 @@ final class CoverageDatabase {
   public function esc_like($value) { return $value; }
   public function prepare($sql, ...$values) { $this->values = $values; return $sql; }
   public function get_var($sql) { return str_contains($sql, 'SHOW TABLES') ? 'wp_wfHits' : null; }
+  public function get_row($sql, $format) {
+    $values = $this->state[$this->values[0]] ?? null;
+    return $values === null ? null : [
+      'reason' => $values[1], 'synced_at' => $values[3],
+      'expires_at' => $values[4] ?? null, 'fail_count' => 0,
+    ];
+  }
   public function get_results($sql, $format) {
     maintenance_assert(str_contains($sql, 'action IN (%s, %s)'), 'Both Wordfence actions must be selected.');
     maintenance_assert(array_slice($this->values, 0, 2) === ['blocked:waf', 'blocked:wordfence'], 'Wrong historical actions.');

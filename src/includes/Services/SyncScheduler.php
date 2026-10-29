@@ -887,6 +887,12 @@ final class SyncScheduler {
 
     foreach (array_keys($wordfence_owned_ips) as $ip) {
       self::assert_active_lease();
+      if (isset($batch_by_ip[$ip])) {
+        $batch_by_ip[$ip]['ownership_changed'] = !BlockOwnership::has(
+          $ip,
+          BlockOwnership::OWNER_WORDFENCE
+        );
+      }
       if (
         !BlockOwnership::add(
           $ip,
@@ -1112,7 +1118,8 @@ final class SyncScheduler {
       }
 
       try {
-        $state_stored = BlockLogger::log($entry['ip'], $log_reason, $entry['expires_at']);
+        $state_changed = false;
+        $state_stored = BlockLogger::log($entry['ip'], $log_reason, $entry['expires_at'], $state_changed);
       } catch (\RuntimeException) {
         $state_stored = false;
       }
@@ -1134,7 +1141,9 @@ final class SyncScheduler {
         continue;
       }
 
-      self::audit($entry['ip'], 'success', !empty($entry['present']) ? 'Cloudflare membership confirmed; local state refreshed' : 'Cloudflare membership established; local state stored', (int) ($entry['evidence'] ?? 0));
+      if (empty($entry['present']) || $state_changed || !empty($entry['ownership_changed'])) {
+        self::audit($entry['ip'], 'success', !empty($entry['present']) ? 'Cloudflare membership confirmed; local state refreshed' : 'Cloudflare membership established; local state stored', (int) ($entry['evidence'] ?? 0));
+      }
       if (!is_multisite() || !Config::uses_network_options()) {
         ResetWatermarkStore::clear($entry['ip']);
       }

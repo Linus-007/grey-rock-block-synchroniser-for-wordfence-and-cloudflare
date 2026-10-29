@@ -191,6 +191,10 @@ final class SharedAttributionDatabaseFake {
     return null;
   }
 
+  public function get_row(string $query, string $format): ?array {
+    global $current_blog_id, $site_logs;
+    return $site_logs[$current_blog_id][$this->prepared_values[0]] ?? null;
+  }
   public function get_results(string $query, string $format): array {
     return $this->history_rows;
   }
@@ -203,6 +207,8 @@ final class SharedAttributionDatabaseFake {
       $site_logs[$current_blog_id][$ip] = [
         'reason' => (string) ($this->prepared_values[1] ?? ''),
         'synced_at' => (string) ($this->prepared_values[3] ?? ''),
+        'expires_at' => $this->prepared_values[4] ?? null,
+        'fail_count' => 0,
       ];
     }
 

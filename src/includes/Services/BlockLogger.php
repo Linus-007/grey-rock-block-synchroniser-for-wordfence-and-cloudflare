@@ -49,16 +49,20 @@ final class BlockLogger {
    * Record a successful synchronization.
    *
    * Existing failed rows are converted into successful rows so a retry can
-   * recover without violating the unique IP constraint.
+   * recover without violating the unique IP constraint. Pass a non-null
+   * state_changed argument to report material changes excluding timestamps.
    */
   public static function log(
     string $ip,
     string $reason = 'sync',
-    ?string $expires_at = null
+    ?string $expires_at = null,
+    ?bool &$state_changed = null
   ): bool {
     if (!AtomicFence::active()) {
       global $wpdb;
-      return AtomicFence::run(static fn () => self::log($ip, $reason, $expires_at), [$wpdb->prefix . self::TABLE]);
+      return AtomicFence::run(static function () use ($ip, $reason, $expires_at, &$state_changed): bool {
+        return self::log($ip, $reason, $expires_at, $state_changed);
+      }, [$wpdb->prefix . self::TABLE]);
     }
 
     if (class_exists(SyncScheduler::class)) {
@@ -72,6 +76,23 @@ final class BlockLogger {
     $table = $wpdb->prefix . self::TABLE;
     $now = AtomicFence::mysql_time();
     $reason = self::normalize_reason($reason);
+
+    // Opt-in transition reporting, read under the same fence as the write.
+    // Confirmation timestamps are refreshes, not material state transitions.
+    if ($state_changed !== null) {
+      $previous = $wpdb->get_row($wpdb->prepare(
+        "SELECT reason, synced_at, expires_at, fail_count FROM {$table} WHERE ip = %s FOR UPDATE",
+        $ip
+      ), ARRAY_A);
+      if (($wpdb->last_error ?? '') !== '') {
+        throw new \RuntimeException('Grey Rock could not read previous synchronization state.');
+      }
+      $state_changed = !is_array($previous)
+        || $previous['synced_at'] === null
+        || (int) $previous['fail_count'] !== 0
+        || $previous['reason'] !== $reason
+        || $previous['expires_at'] !== $expires_at;
+    }
 
     if ($expires_at === null) {
       return $wpdb->query(
