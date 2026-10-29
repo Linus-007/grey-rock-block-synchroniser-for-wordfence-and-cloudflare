@@ -119,7 +119,7 @@ class PublicMetadataRegression(unittest.TestCase):
 
     def test_metadata_history_and_source_bound_approval(self):
         import release_metadata
-        from cve_approval import verify_approval
+        from cve_approval import parse_utc, verify_approval
         import shutil
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -130,7 +130,9 @@ class PublicMetadataRegression(unittest.TestCase):
             for version in ['1.3.11','1.3.12','1.3.13']:
                 subprocess.run(['git','-C',str(root),'tag','v'+version],check=True)
             self.assertEqual(release_metadata.validate(root, VERSION), VERSION)
-            verify_approval(root, 'CVE-2026-115560')
+            approved = verify_approval(root, 'CVE-2026-115560')
+            self.assertEqual(approved['approved_source_sha256'],
+                             '8cf764c61a9dda76f747f5f7720e981bd81ee34e4ea2ec94b860aacb18a7bfae')
             for filename, old, new in [
                 ('README.md', 'badge/version-' + VERSION, 'badge/version-0.0.0'),
                 ('README.md', '### 1.3.12', '### missing'),
@@ -142,5 +144,22 @@ class PublicMetadataRegression(unittest.TestCase):
                 with self.subTest(filename=filename, field=old), self.assertRaises(ValueError): release_metadata.validate(root, VERSION)
                 path.write_text(before)
             path = root / 'src' / (artifact.SLUG + '.php')
-            path.write_text(path.read_text().replace('Version: ' + VERSION, 'Version: 1.3.15'))
-            with self.assertRaises(ValueError): verify_approval(root, 'CVE-2026-115560')
+            before = path.read_text()
+            # Always change the fixture, including when VERSION is already 1.3.15.
+            path.write_text(before + '\n// Unapproved source fixture.\n')
+            with self.assertRaisesRegex(ValueError, 'source changed'):
+                verify_approval(root, 'CVE-2026-115560')
+            path.write_text(before)
+            with self.assertRaisesRegex(ValueError, 'expired'):
+                verify_approval(root, 'CVE-2026-115560',
+                                now=parse_utc(approved['expires_at_utc'], 'expires_at_utc'))
+            record_path = root / 'security/cve-2026-115560-exception.json'
+            record = json.loads(record_path.read_text())
+            for approval, reason in [
+                (None, 'approval is missing'),
+                (dict(record['approval'], decision_record=None), 'decision record is missing'),
+            ]:
+                with self.subTest(reason=reason):
+                    record_path.write_text(json.dumps(dict(record, approval=approval)))
+                    with self.assertRaisesRegex(ValueError, reason):
+                        verify_approval(root, 'CVE-2026-115560')
