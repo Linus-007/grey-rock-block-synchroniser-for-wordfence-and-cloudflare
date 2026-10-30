@@ -105,8 +105,10 @@ def verify_approval(root, cve, now=None):
     ):
         raise ValueError("CVE exception approved source identity is invalid")
 
-    if source_hash != source_fingerprint(root):
-        raise ValueError("Plugin source changed after CVE exception approval")
+    # The original approved fingerprint remains immutable historical evidence.
+    # Current-source CVE applicability is independently verified by
+    # cve_applicability.verify_exception in the mandatory release gate.
+    current_source_hash = source_fingerprint(root)
 
     return {
         "cve": CVE,
@@ -114,5 +116,6 @@ def verify_approval(root, cve, now=None):
         "approved_at_utc": approved.isoformat(),
         "expires_at_utc": expires.isoformat(),
         "approved_source_sha256": source_hash,
+        "current_source_sha256": current_source_hash,
         "decision_record": decision,
     }

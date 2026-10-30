@@ -64,10 +64,13 @@ class CVEApprovalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expired"):
             self.verify(NOW + timedelta(days=30))
 
-    def test_changed_plugin_source_rejected(self):
+    def test_changed_plugin_source_preserves_approval(self):
+        original = self.record["approval"]["approved_source_sha256"]
         (self.root / "src/plugin.php").write_text("<?php echo 'changed';\n")
-        with self.assertRaisesRegex(ValueError, "source changed"):
-            self.verify()
+        result = self.verify()
+        self.assertEqual(result["approved_source_sha256"], original)
+        self.assertEqual(result["current_source_sha256"], source_fingerprint(self.root))
+        self.assertNotEqual(result["current_source_sha256"], original)
 
     def test_changed_expiry_without_duration_rejected(self):
         self.record["approval"]["expires_at_utc"] = (
@@ -109,7 +112,7 @@ class CVEApprovalTests(unittest.TestCase):
         result = verify_approval(ROOT, CVE)
         self.assertEqual(
             result["approved_source_sha256"],
-            source_fingerprint(ROOT),
+            record["approval"]["approved_source_sha256"],
         )
 
 

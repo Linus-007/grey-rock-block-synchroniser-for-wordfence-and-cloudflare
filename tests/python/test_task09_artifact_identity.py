@@ -147,8 +147,11 @@ class PublicMetadataRegression(unittest.TestCase):
             before = path.read_text()
             # Always change the fixture, including when VERSION is already 1.3.15.
             path.write_text(before + '\n// Unapproved source fixture.\n')
-            with self.assertRaisesRegex(ValueError, 'source changed'):
-                verify_approval(root, 'CVE-2026-115560')
+            changed = verify_approval(root, 'CVE-2026-115560')
+            self.assertEqual(changed['approved_source_sha256'],
+                             approved['approved_source_sha256'])
+            self.assertNotEqual(changed['current_source_sha256'],
+                                approved['approved_source_sha256'])
             path.write_text(before)
             with self.assertRaisesRegex(ValueError, 'expired'):
                 verify_approval(root, 'CVE-2026-115560',

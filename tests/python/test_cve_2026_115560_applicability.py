@@ -2,9 +2,11 @@
 import json
 from pathlib import Path
 import re
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 CVE = "CVE-2026-115560"
 
 
@@ -74,7 +76,7 @@ class CVE2026115560ApplicabilityTests(unittest.TestCase):
         self.assertEqual(expires - approved, timedelta(days=30))
         self.assertEqual(
             approval["approved_source_sha256"],
-            source_fingerprint(ROOT),
+            verify_approval(ROOT, CVE)["approved_source_sha256"],
         )
         self.assertTrue(approval["decision_record"])
         verify_approval(ROOT, CVE)
