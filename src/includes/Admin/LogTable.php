@@ -82,7 +82,7 @@ final class LogTable extends WP_List_Table {
 			? sanitize_key( wp_unslash( $_GET['orderby'] ) )
 			: 'created_at';
 
-		if ( in_array( $requested_orderby, [ 'ip', 'reason', 'created_at' ], true ) ) {
+		if ( in_array( $requested_orderby, [ 'ip', 'reason', 'created_at', 'event_count' ], true ) ) {
 			$this->orderby = $requested_orderby;
 		}
 
@@ -128,6 +128,7 @@ final class LogTable extends WP_List_Table {
 		return [
 			'ip'         => __( 'IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 			'reason'     => __( 'Reason', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
+			...( $this->audit ? [ 'event_count' => __( 'Events', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ) ] : [] ),
 			'created_at' => __( 'Recorded', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 		];
 	}
@@ -136,6 +137,7 @@ final class LogTable extends WP_List_Table {
 		return [
 			'ip'         => [ 'ip', false ],
 			'reason'     => [ 'reason', false ],
+			...( $this->audit ? [ 'event_count' => [ 'event_count', false ] ] : [] ),
 			'created_at' => [ 'created_at', true ],
 		];
 	}

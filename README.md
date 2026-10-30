@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.15-blue)
+![Version](https://img.shields.io/badge/version-1.3.16-blue)
 ![Tested with WordPress 7.1](https://img.shields.io/badge/WordPress-tested%20with%207.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1051,8 +1051,10 @@ site does not create attribution without matching local request evidence.
 Audit records contain public IPs, internal decision reasons, evidence timestamps
 and, for individual hits, Wordfence row IDs. URLs, credentials, usernames and
 request payloads are not copied. Repeated detections/skips for the same evidence
-are deduplicated; each attempted success/failure is retained. Records older than
-30 days are pruned on the next audit write for that site. Expiration, reset,
+are deduplicated. Failures and meaningful successful state changes are retained;
+unchanged successful confirmations do not create new history. Audit displays one
+row per site, IP and exact recorded timestamp, with an event count and distinct
+reasons. Original evidence rows are retained without age-based pruning. Expiration, reset,
 reconciliation and state deletion do not erase this history. Uninstall removes
 it. Audit database failures make synchronisation incomplete.
 
@@ -1080,6 +1082,10 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.16
+- Group Historical Audit by site, IP and exact recorded timestamp with event counts and preserved outcomes; retain original historical evidence.
+- Configure fenced InnoDB transactions for Oracle MySQL and MariaDB, preserving lease ownership, rollback and fail-closed admission.
 
 ### 1.3.15
 - Suppress repeated Historical Audit success confirmations for unchanged Cloudflare membership while continuing to refresh local synchronization timestamps.

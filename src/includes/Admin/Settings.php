@@ -270,7 +270,7 @@ final class Settings {
       if (
         in_array(
           $requested_orderby,
-          ['site', 'ip', 'reason', 'created_at'],
+          ['site', 'ip', 'reason', 'created_at', 'event_count'],
           true
         )
       ) {
@@ -287,9 +287,11 @@ final class Settings {
         $order = $requested_order;
       }
     }
+    $page = max(1, isset($_GET['paged']) ? absint(wp_unslash($_GET['paged'])) : 1);
     // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
     $rows = [];
+    $total_items = 0;
     $sites = [];
 
     foreach (get_sites(['fields' => 'ids', 'number' => 0, 'network_id' => get_current_network_id()]) as $blog_id) {
@@ -321,24 +323,32 @@ final class Settings {
           'date_to' => $filters['date_to'],
         ];
 
-        foreach (
-          BlockLogger::get_logs(
-            500,
-            0,
-            $site_filters,
-            $orderby === 'site' ? 'created_at' : $orderby,
-            $order,
-            $audit
-          ) as $log
-        ) {
-          $rows[] = [
-            'site_id' => (string) $blog_id,
-            'site_name' => $site_label,
-            'site_url' => $site_url,
-            'ip' => (string) ($log['ip'] ?? ''),
-            'reason' => (string) ($log['reason'] ?? ''),
-            'created_at' => (string) ($log['created_at'] ?? ''),
-          ];
+        $site_total = BlockLogger::count($site_filters, $audit);
+        $total_items += $site_total;
+        // Natural reason ordering differs from SQL collation ordering, so it
+        // needs complete groups. Other sorts need at most page*20 per site.
+        $site_limit = $orderby === 'reason' ? $site_total : min($site_total, $page * 20);
+        if ($site_limit > 0) {
+          foreach (
+            BlockLogger::get_logs(
+              $site_limit,
+              0,
+              $site_filters,
+              $orderby === 'site' ? 'created_at' : $orderby,
+              $order,
+              $audit
+            ) as $log
+          ) {
+            $rows[] = [
+              'site_id' => (string) $blog_id,
+              'site_name' => $site_label,
+              'site_url' => $site_url,
+              'ip' => (string) ($log['ip'] ?? ''),
+              'reason' => (string) ($log['reason'] ?? ''),
+              'event_count' => (int) ($log['event_count'] ?? 1),
+              'created_at' => (string) ($log['created_at'] ?? ''),
+            ];
+          }
         }
       } finally {
         restore_current_blog();
@@ -351,9 +361,10 @@ final class Settings {
         $orderby,
         $order
       ): int {
-        $key = $orderby === 'site'
-          ? 'site_name'
-          : $orderby;
+        $key = match ($orderby) {
+          'site' => 'site_name',
+          default => $orderby,
+        };
 
         if ('ip' === $orderby) {
           $result = self::compare_log_ip_addresses(
@@ -380,7 +391,8 @@ final class Settings {
       }
     );
 
-    $rows = array_slice($rows, 0, 500);
+    $page_count = (int) ceil($total_items / 20);
+    $rows = array_slice($rows, ($page - 1) * 20, 20);
     ?>
     <div class="wrap">
       <h1>
@@ -536,6 +548,7 @@ final class Settings {
                   'site' => __('Site', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                   'ip' => __('IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                   'reason' => __('Reason', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+                  ...($audit ? ['event_count' => __('Events', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')] : []),
                   'created_at' => __('Recorded', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                 ] as $column => $label
               ) :
@@ -596,8 +609,7 @@ final class Settings {
             <?php foreach ($rows as $row): ?>
               <tr>
                 <td>
-                  <a
-                    href="<?php echo esc_url($row['site_url']); ?>"
+                  <a href="<?php echo esc_url($row['site_url']); ?>"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -610,6 +622,7 @@ final class Settings {
                 <td>
                   <?php echo esc_html($row['reason']); ?>
                 </td>
+                <?php if ($audit): ?><td><?php echo esc_html((string) $row['event_count']); ?></td><?php endif; ?>
                 <td>
                   <?php echo esc_html($row['created_at']); ?>
                 </td>
@@ -618,6 +631,12 @@ final class Settings {
           </tbody>
         </table>
       <?php endif; ?>
+      <?php
+      echo wp_kses(paginate_links([
+        'base' => add_query_arg('paged', '%#%'),
+        'format' => '', 'current' => $page, 'total' => $page_count,
+      ]) ?? '', ['a' => ['href' => true, 'class' => true], 'span' => ['class' => true, 'aria-current' => true]]);
+      ?>
     </div>
     <?php
   }

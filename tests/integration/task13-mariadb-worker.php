@@ -80,7 +80,8 @@ try {
   global $wpdb;
   $wpdb->hide_errors();
   $wpdb->suppress_errors(true);
-  t13_ok(str_contains((string) $wpdb->get_var('SELECT VERSION()'), 'MariaDB'));
+  $version = (string) $wpdb->get_var('SELECT VERSION()');
+  t13_ok(str_contains($version, 'MariaDB') || preg_match('/^8\.4\./', $version) === 1);
   t13_ok($wpdb->query('SET SESSION innodb_lock_wait_timeout=3') !== false);
   foreach (array_unique([$wpdb->base_prefix . 'options', $wpdb->options,
     $wpdb->prefix . BlockOwnership::TABLE, $wpdb->prefix . BlockLogger::TABLE,

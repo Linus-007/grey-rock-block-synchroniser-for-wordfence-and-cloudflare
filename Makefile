@@ -53,6 +53,7 @@ validate:
 	@$(PHP) tests/static/wordpress-compatibility-regression.php
 	@$(PHP) tests/static/wordpress-multisite-lifecycle-regression.php
 	@$(PHP) tests/static/log-ui-regression.php
+	@$(PHP) tests/static/audit-membership-transition-regression.php
 	@$(PHP) tests/static/action-feedback-regression.php
 	@$(PHP) tests/static/dns-allow-list-regression.php
 	@$(PHP) tests/static/wordfence-9-compatibility-regression.php

@@ -146,7 +146,8 @@ final class BlockLogger {
   ): array {
     global $wpdb;
 
-    $table = $wpdb->prefix . ($audit ? AuditLog::TABLE : self::TABLE);
+    if ($audit) { return AuditLog::get_logs($limit, $offset, $filters, $orderby, $order); }
+    $table = $wpdb->prefix . self::TABLE;
 
     $ip = isset($filters['ip'])
       ? trim((string) $filters['ip'])
@@ -296,7 +297,8 @@ final class BlockLogger {
   public static function count(array $filters = [], bool $audit = false): int {
     global $wpdb;
 
-    $table = $wpdb->prefix . ($audit ? AuditLog::TABLE : self::TABLE);
+    if ($audit) { return AuditLog::count($filters); }
+    $table = $wpdb->prefix . self::TABLE;
 
     $ip = isset($filters['ip'])
       ? trim((string) $filters['ip'])

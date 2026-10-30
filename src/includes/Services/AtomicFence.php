@@ -40,14 +40,23 @@ final class AtomicFence {
     $original = $wpdb;
     $db = new AtomicConnection($original);
     // Never START TRANSACTION over caller work: it could implicitly commit it.
-    if ((int) $db->get_var('SELECT @@in_transaction') !== 0 || (int) $db->get_var('SELECT @@autocommit') !== 1) {
+    if ((int) $db->get_var('SELECT @@autocommit') !== 1) {
       throw new \RuntimeException('Fencing cannot nest in an external transaction.');
     }
-    if (!str_contains((string) $db->get_var('SELECT VERSION()'), 'MariaDB')) {
-      throw new \RuntimeException('This fencing implementation requires MariaDB.');
-    }
+    // Both engines reject this statement inside an existing transaction. Unlike
+    // START TRANSACTION it cannot implicitly commit caller-owned work.
+    $db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    $mariadb = str_contains((string) $db->get_var('SELECT VERSION()'), 'MariaDB');
+    if (!$mariadb) { $db->isolate_mysql(); }
+    // MySQL's execution limit covers SELECT only. AtomicConnection also
+    // bounds statements on the client and cancels timed-out work. Idle
+    // connections are closed server-side, rolling back open work.
+    $targets = ['innodb_lock_wait_timeout' => 3, 'lock_wait_timeout' => 3]
+      + ($mariadb
+        ? ['idle_transaction_timeout' => 5, 'max_statement_time' => 3]
+        : ['wait_timeout' => 5, 'max_execution_time' => 3000]);
     $settings = [];
-    foreach (['innodb_lock_wait_timeout', 'lock_wait_timeout', 'idle_transaction_timeout', 'max_statement_time'] as $setting) {
+    foreach ($targets as $setting => $target) {
       $value = $db->get_var('SELECT @@' . $setting);
       if (!is_numeric($value) || (float) $value < 0) { throw new \RuntimeException('Fencing session settings unavailable.'); }
       $settings[$setting] = (float) $value;
@@ -57,12 +66,17 @@ final class AtomicFence {
     add_filter('pre_http_request', $deny_http, PHP_INT_MAX);
     self::$failed = false; self::$cache = []; self::$configuration = [];
     try {
-      $db->query('SET SESSION innodb_lock_wait_timeout = 3');
-      $db->query('SET SESSION lock_wait_timeout = 3');
-      $db->query('SET SESSION idle_transaction_timeout = 5');
-      $db->query('SET SESSION max_statement_time = 3');
+      foreach ($targets as $setting => $target) {
+        $db->query('SET SESSION ' . $setting . ' = ' . $target);
+        if ((float) $db->get_var('SELECT @@' . $setting) !== (float) $target) {
+          throw new \RuntimeException('Fencing session configuration was not applied.');
+        }
+      }
+      // Reapply after admission reads: this characteristic is for the next
+      // transaction, rather than a persistent session default.
       $db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
       $db->query('START TRANSACTION'); $begun = true;
+      if (!$mariadb) { $db->assert_mysql_backend(); }
       $wpdb = $db; self::$active = true;
       $deadline = PHP_INT_MAX;
       foreach ($leases as $lease) {
@@ -99,6 +113,7 @@ final class AtomicFence {
       foreach ($settings as $setting => $value) {
         try { $db->query('SET SESSION ' . $setting . ' = ' . $value); } catch (\Throwable) { $db->close(); break; }
       }
+      if (!$mariadb) { $db->close(); }
       // Deletion only: never publish uncommitted values, even on uncertain COMMIT.
       foreach (self::$cache as [$key, $group]) { wp_cache_delete($key, $group); }
       self::$cache = [];

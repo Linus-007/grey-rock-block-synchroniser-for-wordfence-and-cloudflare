@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.15
+Stable tag: 1.3.16
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -282,9 +282,10 @@ Uninstalling the plugin removes its local plugin options and tables according to
 Historical Audit stores public IP addresses, internal decision reasons, evidence
 timestamps and Wordfence row IDs in a separate site-specific table. It does not
 copy request URLs, usernames, request bodies or credentials. Repeated detections
-and skips are deduplicated; success/failure attempts are retained individually.
-Audit records older than 30 days are removed on the next audit write for that
-site. Synchronisation-state removal does not delete audit history. Uninstall
+and skips are deduplicated; failures and meaningful successful state changes
+are retained. Unchanged successful confirmations do not create new history.
+Audit displays one row per site, IP and exact recorded timestamp with an event
+count and distinct reasons. Original evidence rows are retained without pruning. Synchronisation-state removal does not delete audit history. Uninstall
 removes the audit table. Site Admin sees one site's audit; Network Admin sees
 recent records from the current network. Historical blocked:wordfence requests
 require current IP-block authority; missing block type or expiry is not inferred
@@ -483,6 +484,10 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.16 =
+* Group Historical Audit by site, IP and exact recorded timestamp, with event counts and distinct outcomes. Preserve original historical evidence.
+* Support Oracle MySQL and MariaDB transaction configuration with fenced InnoDB writes and fail-closed rollback.
 
 = 1.3.15 =
 * Suppress repeated Historical Audit success confirmations for unchanged Cloudflare membership while continuing to refresh local synchronization timestamps.
@@ -694,6 +699,9 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.16 =
+Restores Oracle MySQL compatibility and aggregates Historical Audit without deleting historical evidence.
 
 = 1.3.15 =
 Repairs duplicate Historical Audit confirmations for unchanged membership while preserving state refreshes, meaningful transitions, failures and existing audit history.

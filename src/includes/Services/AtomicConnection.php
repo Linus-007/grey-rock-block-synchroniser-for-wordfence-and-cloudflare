@@ -16,6 +16,9 @@ final class AtomicConnection {
   private object $original;
   private \mysqli $handle;
   private array $engines = [];
+  private bool $dedicated = false;
+  private int $connection_id = 0;
+  private array $backend = [];
   public string $last_error = '';
 
   public function __construct(object $original) {
@@ -31,7 +34,94 @@ final class AtomicConnection {
   }
 
   public function close(): void {
-    try { $this->original->close(); } catch (\Throwable) { /* A dead handle is already unusable. */ }
+    try {
+      if ($this->dedicated) { mysqli_close($this->handle); }
+      else { $this->original->close(); }
+    } catch (\Throwable) { /* A dead handle is already unusable. */ }
+  }
+
+  public function __destruct() {
+    if ($this->dedicated) { $this->close(); }
+  }
+
+  /** MySQL lacks MariaDB's DML deadline; configure a fresh bounded transport. */
+  public function isolate_mysql(): void {
+    // Admission already rejected caller transactions. Consume its next-
+    // transaction isolation setting without changing the caller's defaults.
+    $this->query('START TRANSACTION');
+    $this->query('ROLLBACK');
+    $this->backend = [(string) $this->get_var('SELECT @@server_uuid'), (string) $this->get_var('SELECT DATABASE()')];
+    $mode = (string) $this->get_var('SELECT @@sql_mode');
+    $collation = (string) $this->get_var('SELECT @@collation_connection');
+    $timezone = (string) $this->get_var('SELECT @@time_zone');
+    $charset = mysqli_character_set_name($this->handle);
+    if (!preg_match('/^[A-Z0-9_,]*$/D', $mode)
+      || !preg_match('/^[a-zA-Z0-9_]+$/D', $collation)
+      || !preg_match('/^[a-zA-Z0-9_+\/:\-]+$/D', $timezone)) {
+      throw new \RuntimeException('Unsupported fenced connection configuration.');
+    }
+    $handle = $this->connect(3);
+    try {
+      if (!mysqli_set_charset($handle, $charset)
+        || !mysqli_query($handle, "SET SESSION sql_mode = '{$mode}'")
+        || !mysqli_query($handle, "SET SESSION collation_connection = '{$collation}'")
+        || !mysqli_query($handle, "SET SESSION time_zone = '{$timezone}'")) {
+        throw new \RuntimeException('Fenced connection configuration unavailable.');
+      }
+    } catch (\Throwable) {
+      mysqli_close($handle);
+      throw new \RuntimeException('Fenced connection configuration unavailable.');
+    }
+    $this->handle = $handle;
+    $this->dedicated = true;
+    $this->connection_id = mysqli_thread_id($handle);
+  }
+
+  /** A new session must lock the same primary and schema as lease admission. */
+  public function assert_mysql_backend(): void {
+    $actual = [(string) $this->get_var('SELECT @@server_uuid'), (string) $this->get_var('SELECT DATABASE()')];
+    if ($this->backend === [] || in_array('', $this->backend, true) || $actual !== $this->backend) {
+      throw new \RuntimeException('Fenced database backend changed.');
+    }
+  }
+
+  /** No reconnect: this creates a new session before protected work begins. */
+  private function connect(int $read_timeout): \mysqli {
+    $configuration = (\Closure::bind(static function ($db): array {
+      return [$db->parse_db_host($db->dbhost), $db->dbuser, $db->dbpassword, $db->dbname];
+    }, null, \wpdb::class))($this->original);
+    [$address, $user, $password, $database] = $configuration;
+    if (!is_array($address)) { throw new \RuntimeException('Database address unavailable.'); }
+    [$host, $port, $socket, $ipv6] = $address;
+    if ($ipv6) { $host = '[' . $host . ']'; }
+    $handle = mysqli_init();
+    try {
+      if (!mysqli_options($handle, MYSQLI_OPT_CONNECT_TIMEOUT, 1)
+        || !mysqli_options($handle, MYSQLI_OPT_READ_TIMEOUT, $read_timeout)
+        || !mysqli_real_connect($handle, $host, $user, $password, $database, $port, $socket,
+          defined('MYSQL_CLIENT_FLAGS') ? MYSQL_CLIENT_FLAGS : 0)) {
+        throw new \RuntimeException('Fenced connection unavailable.');
+      }
+      return $handle;
+    } catch (\Throwable) {
+      try { mysqli_close($handle); } catch (\Throwable) {}
+      throw new \RuntimeException('Fenced connection unavailable.');
+    }
+  }
+
+  /** Kill only the failed dedicated session; never replay protected work. */
+  private function cancel_statement(): void {
+    $control = null;
+    try {
+      $control = $this->connect(1);
+      mysqli_query($control, 'KILL CONNECTION ' . $this->connection_id);
+    } catch (\Throwable) {
+      // Failure still closes the mutation session and cannot turn into COMMIT.
+      // Server cleanup may take longer when cancellation is unavailable.
+    } finally {
+      if ($control instanceof \mysqli) { try { mysqli_close($control); } catch (\Throwable) {} }
+      $this->close();
+    }
   }
 
   public function __get(string $name) { return $this->original->$name; }
@@ -47,10 +137,16 @@ final class AtomicConnection {
         $this->require_innodb($match[1]);
       }
       $result = mysqli_query($this->handle, $sql);
-      if ($result === false) { throw new \RuntimeException('Fenced database statement failed.'); }
+      if ($result === false || mysqli_errno($this->handle) !== 0) {
+        if ($result instanceof \mysqli_result) { mysqli_free_result($result); }
+        throw new \RuntimeException('Fenced database statement failed.');
+      }
       return $result instanceof \mysqli_result ? $result : mysqli_affected_rows($this->handle);
     } catch (\Throwable $error) {
       $this->last_error = 'Fenced database statement failed.';
+      $errno = 0;
+      try { $errno = mysqli_errno($this->handle); } catch (\Throwable) {}
+      if ($this->dedicated && in_array($errno, [2006, 2013], true)) { $this->cancel_statement(); }
       throw new \RuntimeException('Fenced database statement failed.');
     }
   }

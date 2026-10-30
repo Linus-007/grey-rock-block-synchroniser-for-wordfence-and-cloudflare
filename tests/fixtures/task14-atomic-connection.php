@@ -6,6 +6,7 @@ final class AtomicConnection {
   private array $writes = [];
   private int $mutations = 0;
   private bool $transaction = false;
+  private array $settings = [];
   public string $last_error = '';
   public function __construct(object $db) { $this->db = $db; }
   public function __get(string $key) { return $this->db->$key; }
@@ -22,7 +23,7 @@ final class AtomicConnection {
     if ($sql === 'SELECT @@in_transaction') { return ($GLOBALS['model_outer_tx'] ?? false) ? 1 : 0; }
     if ($sql === 'SELECT @@autocommit') { return 1; }
     if ($sql === 'SELECT VERSION()') { return '11.4-MariaDB-model'; }
-    if (str_starts_with($sql, 'SELECT @@')) { return 50; }
+    if (str_starts_with($sql, 'SELECT @@')) { return $this->settings[substr($sql, 9)] ?? 50; }
     if ($sql === 'SELECT UNIX_TIMESTAMP()') { return $GLOBALS['fence_clock']; }
     [$query, $args] = unserialize($sql);
     if (str_contains($query, 'FOR UPDATE')) {
@@ -41,6 +42,8 @@ final class AtomicConnection {
     return $raw === null ? [] : [['value' => $raw]];
   }
   public function query(string $sql) {
+    if (str_starts_with($sql, 'SET TRANSACTION') && ($GLOBALS['model_outer_tx'] ?? false)) { throw new \RuntimeException('Active external transaction.'); }
+    if (preg_match('/^SET SESSION ([a-z_]+) = ([0-9.]+)$/D', $sql, $match)) { $this->settings[$match[1]] = (float) $match[2]; return 0; }
     if (str_starts_with($sql, 'SET ')) { return 0; }
     if ($sql === 'START TRANSACTION') { $this->transaction = true; return 0; }
     if ($sql === 'ROLLBACK') { $this->writes = []; $this->mutations = 0; $this->transaction = false; return 0; }
