@@ -10,7 +10,7 @@ import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT = ROOT / 'reports/1.3.16'
+REPORT = Path(os.environ.get('GREY_ROCK_MATRIX_REPORT_DIR', str(ROOT / 'reports/1.3.16')))
 REPORT.mkdir(parents=True, exist_ok=True)
 
 def run(args, **kwargs):
@@ -26,6 +26,7 @@ def main():
         run(['curl', '-fLsS', 'https://downloads.wordpress.org/plugin/wordfence.9.0.2.zip', '-o', str(fixture)])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--engine', action='append', choices=['mysql:8.4', 'mariadb:11.8'])
+    parser.add_argument('--abuse-only', action='store_true', help='Focused mock reporting tests on single-site and multisite')
     parser.add_argument('--faults-only', action='store_true', help='Diagnose database fault behavior without Wordfence/sync setup')
     args = parser.parse_args()
     candidate_source = source_fingerprint(ROOT)
@@ -72,21 +73,33 @@ def main():
                     return command('exec', cli, 'wp', '--allow-root', '--path=/var/www/html', *args)
                 wp('eval', '--skip-wordpress', "$_SERVER['HTTP_HOST']='greyrock.test'; $_SERVER['REQUEST_URI']='/'; define('WP_INSTALLING', true); require '/var/www/html/wp-load.php'; require_once ABSPATH . 'wp-admin/includes/upgrade.php'; wp_install('Matrix', 'matrix', 'matrix@example.test', true, '', bin2hex(random_bytes(24))); update_option('home','http://greyrock.test'); update_option('siteurl','http://greyrock.test');")
                 command('exec', cli, 'sh', '-c', 'cp -a /repo/src /var/www/html/wp-content/plugins/grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
-                if args.faults_only:
+                if args.abuse_only:
+                    wp('plugin', 'activate', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
+                    wp('eval-file', '--use-include', '/repo/tests/integration/abuseipdb-reporting.php')
+                    wp('core', 'multisite-convert', '--title=Matrix Network')
+                    multisite_config = config.replace("$table_prefix=", "define('MULTISITE',true);\ndefine('SUBDOMAIN_INSTALL',false);\ndefine('DOMAIN_CURRENT_SITE','greyrock.test');\ndefine('PATH_CURRENT_SITE','/');\ndefine('SITE_ID_CURRENT_SITE',1);\ndefine('BLOG_ID_CURRENT_SITE',1);\n$table_prefix=")
+                    command('exec', '-i', cli, 'sh', '-c', 'cat > /var/www/html/wp-config.php', input=multisite_config)
+                    wp('plugin', 'activate', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare', '--network')
+                    wp('eval-file', '--use-include', '/repo/tests/integration/abuseipdb-reporting.php')
+                    log.write('ABUSE ONLY PASS\n')
+                elif args.faults_only:
                     wp('plugin', 'activate', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316-faults.php')
+                    wp('eval-file', '--use-include', '/repo/tests/integration/abuseipdb-reporting.php')
                     log.write('FAULTS ONLY PASS\n')
                 else:
                     wp('plugin', 'install', '/repo/.tools/1316/wordfence.zip', '--activate')
                     wp('plugin', 'activate', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316.php')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316-faults.php')
+                    wp('eval-file', '--use-include', '/repo/tests/integration/abuseipdb-reporting.php')
                     wp('core', 'multisite-convert', '--title=Matrix Network')
                     multisite_config = config.replace("$table_prefix=", "define('MULTISITE',true);\ndefine('SUBDOMAIN_INSTALL',false);\ndefine('DOMAIN_CURRENT_SITE','greyrock.test');\ndefine('PATH_CURRENT_SITE','/');\ndefine('SITE_ID_CURRENT_SITE',1);\ndefine('BLOG_ID_CURRENT_SITE',1);\n$table_prefix=")
                     command('exec', '-i', cli, 'sh', '-c', 'cat > /var/www/html/wp-config.php', input=multisite_config)
                     wp('plugin', 'activate', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare', '--network')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316.php')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316-faults.php')
+                    wp('eval-file', '--use-include', '/repo/tests/integration/abuseipdb-reporting.php')
                     wp('eval-file', '--use-include', '/repo/tests/integration/greyrock-1316-ui.php')
                     wp('plugin', 'deactivate', 'wordfence')
                     command('exec', cli, 'php', '/repo/tests/integration/task14-mariadb-suite.php', '/var/www/html', 'all')

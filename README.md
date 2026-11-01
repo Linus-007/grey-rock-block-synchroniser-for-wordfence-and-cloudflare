@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.16-blue)
+![Version](https://img.shields.io/badge/version-1.3.17-blue)
 ![Tested with WordPress 7.1](https://img.shields.io/badge/WordPress-tested%20with%207.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1083,6 +1083,9 @@ The generated release file is:
 
 ## Changelog
 
+### 1.3.17
+- Added optional outbound AbuseIPDB reporting, conservative source evidence classification, durable deduplication, daily bulk submissions, accepted-report columns and Ko-fi support.
+
 ### 1.3.16
 - Group Historical Audit by site, IP and exact recorded timestamp with event counts and preserved outcomes; retain original historical evidence.
 - Configure fenced InnoDB transactions for Oracle MySQL and MariaDB, preserving lease ownership, rollback and fail-closed admission.
@@ -1299,3 +1302,73 @@ by this policy; future versions still require advisory clearance before release.
 The matrix covers maintained candidate branches; current known-affected
 candidates fail closed. No configuration mitigation is treated as a fixed
 version. See https://www.php.net/archive/2026.php for the upstream notices.
+
+## Optional AbuseIPDB reporting
+
+Configure reporting on the existing settings page. The stored key is never
+rendered in HTML. Leave its input blank to retain it; use Remove stored key to
+clear it. Network keys are not copied into independent site overrides.
+
+Only source incidents followed by confirmed membership of the effective
+Cloudflare destination are eligible. Pending reports recheck current membership
+and the resolved destination at dispatch; absent, busy or unresolved destinations
+retain pending evidence until a later eligible attempt or expiry. Reporting failures do not change enforcement.
+No Cloudflare Security Events, WAF logs or AbuseIPDB intelligence are read.
+
+The classifier consumes active `wfBlock::reason`, `type` and `blockedTime`, and
+site-attributed historical `wfHits.actionDescription`, `id` and `ctime` already
+read by Grey Rock. The reviewed Wordfence 9.0.2 source assigns WAF rule descriptions
+to historical WAF events. Its block constants identify excessive login failures
+and crawler request limits. These support the following conservative mapping:
+
+| Explicit evidence | AbuseIPDB category |
+| --- | --- |
+| SQL injection rule description | 16 |
+| Excessive login failures identifier | 18 |
+| Crawler request-per-minute limit identifier | 19 |
+| Explicit remote code execution, file inclusion, directory traversal, cross-site scripting, vulnerability probing or web application exploitation | 21 |
+| Explicit web spam | 10 |
+| Explicit blog or comment spam | 12 |
+
+Manual reasons can also explicitly describe brute-force authentication attacks
+or abusive automated crawling. Manual reporting is off by default, including
+Wordfence manual IP blocks. Cloudflare manual blocks still work without a
+reportable reason. No category is inferred from generic WAF blocks, 404s, countries,
+invalid usernames, blank agents, banned URLs, global/human rate policies,
+Security Network reputation, missing reasons or ambiguous/negated descriptions.
+Unsupported or translated descriptions are conservatively skipped.
+
+Only IP, category, source time and a fixed classification description are sent;
+raw evidence, usernames and URLs remain local. Historical audit summaries never
+authorize reporting. Existing audit aggregation is preserved, with Reported
+showing accepted linked incident counts for the displayed group; it does not
+claim that every event or every past occurrence of that IP was reported.
+
+Immediate mode drains eligible pending addresses until none remain or a provider
+limit, uncertain response or worker failure stops progress. Additional pending
+evidence is retained for subsequent workers.
+Daily maintenance processes immediate backlog, or makes one bulk attempt per key
+per rolling 24 hours. Bulk CSV contains at most 9,999 distinct IPs plus the header
+and stays below 8 MB. Pending evidence expires 30 days after its original source
+time. Expiry never refreshes on repeated synchronization. Failed/rejected reports
+are not accepted. A transport failure, malformed success, server failure or crash
+after claim leaves an uncertain receipt that is not automatically replayed.
+Definitive 429 responses defer pending work using Retry-After/reset information.
+An installation-wide IP cooldown enforces at least 15 minutes between attempts.
+API keys for the same AbuseIPDB account used in separate installations cannot be
+coordinated locally; provider restrictions still apply.
+
+Receipts and pending records use shared InnoDB tables with the existing fenced
+transactions and a global reporting lease. Mode changes do not reset incident
+identity. Origin-site configuration signatures prevent pending evidence from
+being sent for a changed or disabled destination. Changing an API key retains
+old pending evidence until expiry, but does not transfer it to another credential.
+Uninstall removes the outbox, incident receipts and stored credentials.
+
+API limits are displayed separately for individual and bulk endpoints from normal
+reporting response headers, with observation timestamps. Missing headers display
+Unavailable. There are no quota polls or configurable budgets.
+
+[AbuseIPDB API documentation](https://docs.abuseipdb.com/) and
+[bulk CSV requirements](https://www.abuseipdb.com/bulk-report).
+[Support Development](https://ko-fi.com/greyscalezone).

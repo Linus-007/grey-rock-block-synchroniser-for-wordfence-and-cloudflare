@@ -113,6 +113,11 @@ final class Config {
     bool $network = false
   ): array {
     $output = [];
+    $key = trim((string) ($input['abuseipdb_api_key'] ?? ''));
+    $output['abuseipdb_api_key'] = preg_match('/^[a-zA-Z0-9]{20,256}$/D', $key) ? $key : '';
+    $output['abuseipdb_enabled'] = !empty($input['abuseipdb_enabled']) ? '1' : '0';
+    $output['abuseipdb_manual'] = !empty($input['abuseipdb_manual']) ? '1' : '0';
+    $output['abuseipdb_mode'] = ($input['abuseipdb_mode'] ?? '') === 'bulk' ? 'bulk' : 'immediate';
 
     $output['cloudflare_mode'] = in_array(
       $input['cloudflare_mode'] ?? 'zone_access_rules',
@@ -246,6 +251,9 @@ final class Config {
    * Save Network Admin defaults.
    */
   public static function update_network_options(array $input): bool {
+    $existing = self::get_network_options();
+    if (empty($input['abuseipdb_api_key'])) { $input['abuseipdb_api_key'] = $existing['abuseipdb_api_key'] ?? ''; }
+    if (!empty($input['abuseipdb_clear_key'])) { $input['abuseipdb_api_key'] = ''; }
     return update_site_option(
       self::NETWORK_OPTION,
       self::sanitize_options($input, true)
@@ -285,10 +293,12 @@ final class Config {
     if (!self::has_existing_site_configuration($existing)) {
       // Preserve public defaults, but never grant a site administrator a copy
       // of the network credential when enabling an independent override.
-      unset($base['cloudflare_api_token']);
+      unset($base['cloudflare_api_token'], $base['abuseipdb_api_key']);
     }
 
+    if (empty($input['abuseipdb_api_key'])) { unset($input['abuseipdb_api_key']); }
     $merged = array_merge($base, $input);
+    if (!empty($input['abuseipdb_clear_key'])) { $merged['abuseipdb_api_key'] = ''; }
     $merged['configuration_source'] = self::SOURCE_SITE;
 
     return update_option(

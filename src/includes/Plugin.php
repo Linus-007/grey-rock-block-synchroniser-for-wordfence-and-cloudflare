@@ -207,6 +207,7 @@ final class Plugin {
 
   private static function load_services(): void {
     SyncScheduler::register();
+    \WPCF\FirewallSync\AbuseIPDB\Reporter::register();
   }
 
   private static function load_cli(): void {

@@ -18,9 +18,11 @@ $wpdb = new class {
   public string $prefix = 'wp_';
   public string $base_prefix = 'wp_';
   public array $deleted_state_keys = [];
+  public array $dropped_tables = [];
   public function prepare(string $query, ...$values): string { return serialize([$query, $values]); }
   public function query(string $query): int {
-    if (!str_starts_with($query, 'DROP TABLE')) {
+    if (str_starts_with($query, 'DROP TABLE')) { $this->dropped_tables[] = $query; }
+    else {
       [$sql, $values] = unserialize($query);
       if ($sql !== 'DELETE FROM wp_options WHERE option_name = %s') { throw new RuntimeException('Unscoped state mutex cleanup.'); }
       $this->deleted_state_keys[] = $values[0];
@@ -28,7 +30,8 @@ $wpdb = new class {
     return 1;
   }
 };
-require dirname(__DIR__, 2) . '/src/uninstall.php';
+// Match WordPress's function-scope include; the plugin must import its DB.
+(static function (): void { require dirname(__DIR__, 2) . '/src/uninstall.php'; })();
 if ($network_state[1] !== [] || $network_state[2] !== []) { throw new RuntimeException('Uninstall retained configuration in a secondary network.'); }
 if ($destination_state['pending'] !== 'unknown' || $blog !== 1 || $blog_stack !== []) { throw new RuntimeException('Uninstall cleared unresolved coordination or failed context restoration.'); }
 echo "PASS: uninstall removes each network configuration and preserves unresolved destination state\n";
@@ -40,3 +43,8 @@ foreach ([1, 2] as $network) {
 }
 if ($wpdb->deleted_state_keys !== $expected) { throw new RuntimeException('Uninstall did not remove exact network mutex keys.'); }
 echo "PASS: uninstall removes only the four exact network state mutexes\n";
+
+foreach (['wpcf_abuse_incidents','wpcf_abuse_links','wpcf_abuse_state'] as $suffix) {
+  if (!in_array('DROP TABLE IF EXISTS `wp_'.$suffix.'`',$wpdb->dropped_tables,true)) { throw new RuntimeException('Reporting storage retained after function-scope uninstall.'); }
+}
+echo "PASS: function-scope uninstall removes all reporting storage\n";

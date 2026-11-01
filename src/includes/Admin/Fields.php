@@ -83,6 +83,7 @@ final class Fields {
       self::add_configuration_source_field();
     }
 
+    self::add_reporting_fields();
     self::add_mode_field();
 
     self::add_text_field(
@@ -117,6 +118,36 @@ final class Fields {
     self::add_historical_lookback_field();
     self::add_historical_minimum_events_field();
     self::add_purge_missing_records_field();
+  }
+
+  private static function add_reporting_fields(): void {
+    add_settings_field('abuseipdb', __('AbuseIPDB reporting (optional)', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'), static function (): void {
+      $options = Config::get_admin_options();
+      $disabled = self::configuration_fields_disabled();
+      foreach (['abuseipdb_enabled' => 'Enable outbound reporting', 'abuseipdb_manual' => 'Report manual blocks with valid attack evidence', 'abuseipdb_clear_key' => 'Remove stored AbuseIPDB key'] as $name => $label) {
+        printf('<p><label><input type="checkbox" name="firewall_sync_options[%s]" value="1"%s%s> %s</label></p>', esc_attr($name), checked(!empty($options[$name]), true, false), disabled($disabled, true, false), esc_html($label));
+      }
+      // Never populate the credential in HTML, including the network editor.
+      printf('<p><label>API key <input type="password" name="firewall_sync_options[abuseipdb_api_key]" value="" autocomplete="new-password"%s></label></p>', disabled($disabled, true, false));
+      echo '<p>' . esc_html__('Leave blank to retain the stored key. A site override requires its own key.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
+      printf('<select name="firewall_sync_options[abuseipdb_mode]"%s>', disabled($disabled, true, false));
+      foreach (['immediate' => 'Immediate', 'bulk' => 'Daily bulk'] as $value => $label) {
+        printf('<option value="%s"%s>%s</option>', esc_attr($value), selected($options['abuseipdb_mode'] ?? 'immediate', $value, false), esc_html($label));
+      }
+      echo '</select>';
+      echo '<p>' . esc_html__('Only confirmed Cloudflare members with explicit Wordfence evidence qualify. SQL injection: 16; excessive login failures: 18; abusive crawler request limits: 19; explicit exploitation or vulnerability probing: 21; explicit web spam: 10; blog/comment spam: 12. Generic WAF blocks, 404s, country policies, missing and ambiguous reasons are never reported. Historical reports require the original rule description. Manual reporting defaults off and requires a meaningful attack reason. Cloudflare blocking does not require an AbuseIPDB reason.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
+      echo '<p>' . esc_html__('Only IP, category, evidence timestamp and a fixed description are sent. Pending evidence expires after 30 days. Daily bulk makes at most one attempt per key in 24 hours; up to 9,999 distinct IPs. Uncertain submissions are not automatically replayed. Changing modes does not clear deduplication. You are responsible for your API allowance.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
+      if (!$disabled) {
+        foreach ([false => 'Individual', true => 'Bulk'] as $bulk => $label) {
+          try { $limits = \WPCF\FirewallSync\AbuseIPDB\Reporter::limits($options, (bool) $bulk); } catch (\Throwable) { $limits = []; }
+          $parts = [];
+          foreach (['limit', 'remaining', 'reset', 'observed_at'] as $field) {
+            $parts[] = $field . ': ' . (isset($limits[$field]) ? (string) $limits[$field] : 'Unavailable');
+          }
+          echo '<p>' . esc_html($label . ' API — ' . implode('; ', $parts)) . '</p>';
+        }
+      }
+    }, 'firewall-sync-settings', 'firewall_sync_main_section');
   }
 
   private static function add_allow_site_overrides_field(): void {
@@ -689,6 +720,8 @@ final class Fields {
       );
     }
 
+    $input['abuseipdb_enabled'] = !empty($input['abuseipdb_enabled']) ? '1' : '0';
+    $input['abuseipdb_manual'] = !empty($input['abuseipdb_manual']) ? '1' : '0';
     $input['ddns_allow_enabled'] =
       !empty($input['ddns_allow_enabled'])
         ? '1'
@@ -1006,6 +1039,7 @@ final class Fields {
           );
         }
 
+        if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) { \WPCF\FirewallSync\AbuseIPDB\Reporter::manual($client, $options + ['abuseipdb_origin_network' => $scope === 'network'], $list_id, $ip, $reason, false); }
         self::redirect_with_message(
           $scope,
           sprintf(
@@ -1044,6 +1078,7 @@ final class Fields {
         }
       }
 
+      if ($success) { if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) { \WPCF\FirewallSync\AbuseIPDB\Reporter::manual($client, $options + ['abuseipdb_origin_network' => $scope === 'network'], $list_id, $ip, $reason, false); } }
       $success_message = sprintf(
         /* translators: 1: IP address, 2: Cloudflare list name. */
         __(
@@ -1485,6 +1520,7 @@ final class Fields {
         );
       }
 
+      if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) { \WPCF\FirewallSync\AbuseIPDB\Reporter::manual($client, $options, $list_id ?? '', $ip, $reason); }
       self::redirect_manual_block(
         __('IP address blocked successfully.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
         'updated'

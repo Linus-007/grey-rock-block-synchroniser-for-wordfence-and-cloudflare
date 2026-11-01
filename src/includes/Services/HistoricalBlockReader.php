@@ -119,7 +119,12 @@ final class HistoricalBlockReader {
         }
 
         if ($action === self::WORDFENCE_ACTION) {
-          $events_by_ip[$ip] ??= ['count' => 0, 'latest' => 0];
+          $events_by_ip[$ip] ??= ['count' => 0, 'latest' => 0, 'reporting' => []];
+          if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Evidence::class)) {
+            $incident = \WPCF\FirewallSync\AbuseIPDB\Evidence::incident($ip, $event_time,
+              'hit:' . (int) ($row['event_id'] ?? 0), (string) ($row['event_description'] ?? ''));
+            if ($incident !== null) { $events_by_ip[$ip]['reporting'][] = $incident; }
+          }
           $events_by_ip[$ip]['count']++;
           $events_by_ip[$ip]['latest'] = max($events_by_ip[$ip]['latest'], $event_time);
         } elseif ($audit !== null) {
@@ -149,6 +154,7 @@ final class HistoricalBlockReader {
         'ip' => $ip,
         'event_count' => $event_count,
         'latest_event' => $event_times['latest'],
+        'reporting' => $event_times['reporting'],
       ];
     }
 

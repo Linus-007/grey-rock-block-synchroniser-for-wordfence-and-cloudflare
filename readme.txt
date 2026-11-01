@@ -1,10 +1,11 @@
 === Grey Rock Block Synchroniser for Wordfence and Cloudflare ===
 Contributors: greyscalezone
+Donate link: https://ko-fi.com/greyscalezone
 Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.16
+Stable tag: 1.3.17
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -220,6 +221,29 @@ This plugin is not affiliated with, endorsed by or sponsored by Wordfence or Clo
 
 == External services ==
 
+AbuseIPDB (optional): enabled only with an administrator-configured API key.
+Grey Rock sends qualifying public IPs, categories, evidence timestamps and fixed
+attack descriptions to https://api.abuseipdb.com/api/v2/report or bulk-report.
+Raw URLs, request data, usernames, source reasons and credentials are never
+included in report content. Keys travel only in the HTTPS Key header.
+Wordfence remains the detection authority and Cloudflare the enforcement target.
+No AbuseIPDB intelligence or Cloudflare security logs are ingested.
+Terms: https://www.abuseipdb.com/legal
+Privacy: https://www.abuseipdb.com/privacy
+API documentation: https://docs.abuseipdb.com/
+
+Reporting is disabled by default. Manual reporting is separately disabled by
+default and requires explicit attack evidence. Missing, ambiguous, geographic,
+generic WAF and generic 404 reasons never qualify. Historical reporting uses
+recoverable source rule descriptions rather than synchronization summaries.
+Eligible pending incidents expire at 30 days from source evidence. Uncertain
+submissions are never automatically replayed. Accepted incident receipts survive
+mode changes and process restarts. Bulk submits at most once per API key per
+24 hours, with 9,999 distinct addresses maximum; remaining evidence stays queued.
+Limits are observed from reporting responses only. The user manages API allowance.
+Ko-fi support is an ordinary external link; no payment data is collected.
+
+
 This plugin connects to the Cloudflare API when an administrator:
 
 * Validates saved Cloudflare settings.
@@ -266,6 +290,8 @@ https://developers.cloudflare.com/api/
 == Privacy ==
 
 The plugin stores its configuration in the WordPress database. This includes the Cloudflare API token and Cloudflare identifiers entered by an administrator.
+
+When optional AbuseIPDB reporting is configured, its API key is also stored in the configuration. Shared InnoDB tables retain incident identities, public IPs, categories, fixed evidence descriptions, original timestamps, destination associations, pending/accepted/uncertain status and response-header limit observations. Pending evidence cannot be submitted after 30 days; durable receipts prevent duplicate reporting. Uninstall removes these tables and credentials.
 
 The plugin stores synchronised public IP addresses, block reasons, timestamps, expiration information and retry state in a site-specific WordPress database table.
 
@@ -484,6 +510,11 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.17 =
+* Added optional outbound AbuseIPDB reporting after confirmed Cloudflare membership, durable incident deduplication, conservative evidence classification and daily bulk submission.
+* Added accepted-report indicators to the existing logs and a Ko-fi support link.
+
 
 = 1.3.16 =
 * Group Historical Audit by site, IP and exact recorded timestamp, with event counts and distinct outcomes. Preserve original historical evidence.

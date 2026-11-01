@@ -243,6 +243,7 @@ final class SyncScheduler {
       return false;
     } finally {
       self::release_lock();
+      if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) { \WPCF\FirewallSync\AbuseIPDB\Reporter::flush(); }
     }
   }
 
@@ -642,6 +643,7 @@ final class SyncScheduler {
      * operation but must still establish current Wordfence ownership.
      */
     $batch_by_ip = [];
+    $reporting_batch = [];
     $wordfence_owned_ips = [];
     $active_ips = [];
 
@@ -734,6 +736,18 @@ final class SyncScheduler {
 
       if ($record_local) {
         $wordfence_owned_ips[$ip] = true;
+      }
+
+      // Reporting has its own incident stream: unchanged Cloudflare state
+      // must not hide a genuinely new Wordfence incident for an existing IP.
+      if (!empty($options['abuseipdb_enabled']) && $record_local && $blocked_time > $reset_watermark
+        && class_exists(\WPCF\FirewallSync\AbuseIPDB\Evidence::class)) {
+        $incident = \WPCF\FirewallSync\AbuseIPDB\Evidence::incident($ip, $blocked_time, 'active:' . $block_type,
+          ($block_type === \wfBlock::TYPE_IP_MANUAL && empty($options['abuseipdb_manual'])) ? '' : $reason,
+          $block_type === \wfBlock::TYPE_IP_MANUAL);
+        if ($incident !== null) {
+          $reporting_batch[] = ['ip' => $ip, 'record_local' => true, 'evidence' => $blocked_time, 'reporting' => [$incident]];
+        }
       }
 
       // Complete inventory is the membership authority. A present entry
@@ -836,6 +850,9 @@ final class SyncScheduler {
        * by an active-block batch entry.
        */
       $wordfence_owned_ips[$ip] = true;
+      if (!empty($options['abuseipdb_enabled']) && !empty($historical_block['reporting'])) {
+        $reporting_batch[] = ['ip' => $ip, 'record_local' => true, 'evidence' => $latest_event, 'reporting' => $historical_block['reporting']];
+      }
 
       if (isset($batch_by_ip[$ip]) || isset($active_ips[$ip])) {
         if (isset($batch_by_ip[$ip])) { $batch_by_ip[$ip]['record_local'] = true; }
@@ -951,6 +968,12 @@ final class SyncScheduler {
       $failed = self::record_batch_results($batch, $failed, $client->get_retryable_failed_ips());
     }
 
+    if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) {
+      $confirmed = array_values(array_filter($reporting_batch, static fn ($entry) => !in_array($entry['ip'], $failed, true)));
+      foreach ($confirmed as &$report_entry) { $report_entry['link_log'] = isset($batch_by_ip[$report_entry['ip']]); }
+      unset($report_entry);
+      \WPCF\FirewallSync\AbuseIPDB\Reporter::defer($client, $options, $list_id, $confirmed);
+    }
     self::assert_active_lease();
     AtomicFence::run(static fn () => AtomicFence::option(
       'firewall_sync_last_run', false, true,
@@ -1640,10 +1663,12 @@ final class SyncScheduler {
   public static function reschedule(): void {
     self::deactivate();
     self::schedule_events();
+    if (class_exists(\WPCF\FirewallSync\AbuseIPDB\Reporter::class)) { \WPCF\FirewallSync\AbuseIPDB\Reporter::register(); }
   }
 
   public static function deactivate(): void {
     wp_clear_scheduled_hook(self::HOOK);
     wp_clear_scheduled_hook(self::CLEANUP_HOOK);
+    wp_clear_scheduled_hook('firewall_sync_abuseipdb_daily');
   }
 }

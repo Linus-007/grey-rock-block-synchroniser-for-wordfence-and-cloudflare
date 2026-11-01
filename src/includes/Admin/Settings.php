@@ -339,7 +339,9 @@ final class Settings {
               $audit
             ) as $log
           ) {
+            try { $reported = \WPCF\FirewallSync\AbuseIPDB\Reporter::reported($log, $audit); } catch (\Throwable) { $reported = 'Unavailable'; }
             $rows[] = [
+              'reported' => $reported,
               'site_id' => (string) $blog_id,
               'site_name' => $site_label,
               'site_url' => $site_url,
@@ -549,6 +551,7 @@ final class Settings {
                   'ip' => __('IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                   'reason' => __('Reason', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                   ...($audit ? ['event_count' => __('Events', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')] : []),
+                  'reported' => __('Reported', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                   'created_at' => __('Recorded', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
                 ] as $column => $label
               ) :
@@ -623,6 +626,7 @@ final class Settings {
                   <?php echo esc_html($row['reason']); ?>
                 </td>
                 <?php if ($audit): ?><td><?php echo esc_html((string) $row['event_count']); ?></td><?php endif; ?>
+                <td><?php echo esc_html($row['reported'] ?? 'No'); ?></td>
                 <td>
                   <?php echo esc_html($row['created_at']); ?>
                 </td>
@@ -809,6 +813,11 @@ final class Settings {
         </div>
       <?php endif; ?>
 
+      <div class="grey-rock-support">
+        <h2><?php echo esc_html__('Support Greyscale Zone', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'); ?></h2>
+        <p><?php echo esc_html__('Grey Rock Block Synchroniser is provided free of charge. If you find the plugin useful, your voluntary support is greatly appreciated and helps support ongoing development, maintenance and improvements.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'); ?></p>
+        <p><a href="<?php echo esc_url('https://ko-fi.com/greyscalezone'); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('Support Greyscale Zone', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'); ?></a></p>
+      </div>
       <?php self::render_setup_guide(); ?>
 
       <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">

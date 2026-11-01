@@ -129,6 +129,7 @@ final class LogTable extends WP_List_Table {
 			'ip'         => __( 'IP Address', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 			'reason'     => __( 'Reason', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 			...( $this->audit ? [ 'event_count' => __( 'Events', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ) ] : [] ),
+			'reported' => __( 'Reported', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 			'created_at' => __( 'Recorded', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 		];
 	}
@@ -235,6 +236,9 @@ final class LogTable extends WP_List_Table {
 	}
 
 	public function column_default( $item, $column_name ): string {
+		if ( $column_name === 'reported' ) {
+			try { return esc_html( \WPCF\FirewallSync\AbuseIPDB\Reporter::reported( $item, $this->audit ) ); } catch ( \Throwable ) { return 'Unavailable'; }
+		}
 		return esc_html( (string) ( $item[ $column_name ] ?? '' ) );
 	}
 

@@ -203,9 +203,9 @@ final class BlockLogger {
             $reason,
             $reason_like,
             $date_from,
-            $date_from,
+            $date_from !== '' ? $date_from : '1000-01-01 00:00:00',
             $date_to,
-            $date_to,
+            $date_to !== '' ? $date_to : '9999-12-31 23:59:59',
             $limit,
             $offset
           ),
@@ -229,9 +229,9 @@ final class BlockLogger {
           $reason,
           $reason_like,
           $date_from,
-          $date_from,
+          $date_from !== '' ? $date_from : '1000-01-01 00:00:00',
           $date_to,
-          $date_to,
+          $date_to !== '' ? $date_to : '9999-12-31 23:59:59',
           $limit,
           $offset
         ),
@@ -256,9 +256,9 @@ final class BlockLogger {
           $reason,
           $reason_like,
           $date_from,
-          $date_from,
+          $date_from !== '' ? $date_from : '1000-01-01 00:00:00',
           $date_to,
-          $date_to,
+          $date_to !== '' ? $date_to : '9999-12-31 23:59:59',
           $orderby_sql,
           $limit,
           $offset
@@ -283,9 +283,9 @@ final class BlockLogger {
         $reason,
         $reason_like,
         $date_from,
-        $date_from,
+        $date_from !== '' ? $date_from : '1000-01-01 00:00:00',
         $date_to,
-        $date_to,
+        $date_to !== '' ? $date_to : '9999-12-31 23:59:59',
         $orderby_sql,
         $limit,
         $offset
@@ -337,9 +337,9 @@ final class BlockLogger {
           $reason,
           $reason_like,
           $date_from,
-          $date_from,
+          $date_from !== '' ? $date_from : '1000-01-01 00:00:00',
           $date_to,
-          $date_to,
+          $date_to !== '' ? $date_to : '9999-12-31 23:59:59',
         ]
       )
     );

@@ -50,9 +50,13 @@ function grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_sit
 
   wp_clear_scheduled_hook('firewall_sync_cron_event');
   wp_clear_scheduled_hook('firewall_sync_cleanup_event');
+  wp_clear_scheduled_hook('firewall_sync_abuseipdb_daily');
 
   delete_transient('firewall_sync_reconcile_result');
 }
+
+// WordPress includes uninstall.php from function scope.
+global $wpdb;
 
 if (is_multisite()) {
   foreach (get_sites(['fields' => 'ids', 'number' => 0]) as $blog_id) {
@@ -88,4 +92,10 @@ if (is_multisite()) {
   }
 } else {
   grey_rock_block_synchroniser_for_wordfence_and_cloudflare_uninstall_site();
+}
+
+// Physical uninstall removes the installation-wide reporting outbox and receipts.
+foreach (['wpcf_abuse_incidents', 'wpcf_abuse_links', 'wpcf_abuse_state'] as $report_table) {
+  $report_table = $wpdb->base_prefix . $report_table;
+  $wpdb->query("DROP TABLE IF EXISTS `{$report_table}`");
 }

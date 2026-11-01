@@ -29,6 +29,7 @@ validate:
 	@echo "Validating release builder..."
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
 	@echo "Running static regression checks..."
+	@$(PHP) tests/static/abuseipdb-evidence-regression.php
 	@$(PHP) tests/static/independent-worker-regression.php
 	@$(PHP) tests/static/independent-state-regression.php
 	@$(PHP) tests/static/independent-lock-regression.php

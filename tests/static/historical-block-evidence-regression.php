@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../fixtures/task14-unit-fence.php';
 
 $root = dirname(__DIR__, 2);
+require_once $root . '/src/includes/AbuseIPDB/Evidence.php';
 $now = time();
 $test_options = [];
 
@@ -331,4 +332,12 @@ maintenance_assert(
   'Network reconciliation is not gated on every site succeeding.'
 );
 
+$wpdb->rows = [
+  ['ip_hex' => wf_ip_hex('8.8.4.4'), 'event_time' => $now - 10, 'event_url' => 'https://greyscale.zone/attack', 'event_id' => 141, 'event_action' => 'blocked:waf', 'event_description' => 'SQL injection attack'],
+  ['ip_hex' => wf_ip_hex('8.8.4.4'), 'event_time' => $now - 5, 'event_url' => 'https://greyscale.zone/other', 'event_id' => 142, 'event_action' => 'blocked:waf', 'event_description' => 'Generic WAF block'],
+];
+$classified = \WPCF\FirewallSync\Services\HistoricalBlockReader::get_candidates(24, 1, ['greyscale.zone']);
+maintenance_assert(count($classified) === 1 && $classified[0]['event_count'] === 2, 'Reporting must preserve enforcement event counts.');
+maintenance_assert(count($classified[0]['reporting']) === 1 && $classified[0]['reporting'][0]['categories'] === '16', 'Only recoverable explicit historical evidence can be classified.');
+maintenance_assert($classified[0]['reporting'][0]['evidence_at'] === $now - 10, 'The original historical incident time must be retained, not the latest aggregate time.');
 echo "Historical block evidence regression: PASS\n";
