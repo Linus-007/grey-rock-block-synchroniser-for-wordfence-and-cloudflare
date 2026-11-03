@@ -16,6 +16,9 @@ foreach (['SQL injection attack'=>16,'Remote file inclusion attack'=>21,'Web spa
 foreach (['','Unknown','Generic WAF block','Generic 404 page','blocked access via country blocking','Not SQL injection','Possible SQL injection','Potential SQL injection','Could be SQL injection','SQL injection?','Unconfirmed remote code execution','Blocked by Wordfence Security Network','Manual block by administrator','Accessed a banned URL','POST received with blank user-agent and referer','GET https://example.test/sql injection', 'Exceeded the maximum number of page not found errors per minute for a crawler.'] as $reason) {
   ae_ok(Evidence::classify($reason)===null,'Reject unsupported evidence: '.$reason);
 }
+ae_ok(Evidence::classify('Known Malicious User-Agents')['categories']==='19','Real Wordfence malicious user-agent detection');
+ae_ok(Evidence::classify('Known Malicious User-Agents',true)===null,'Manual blocks cannot impersonate Wordfence detections');
+ae_ok(Evidence::incident('8.8.8.8',time()-10,'hit:164386','Known Malicious User-Agents')['categories']==='19','Real WAF detection produces reportable incident');
 ae_ok(Evidence::classify('Brute force authentication attacks observed',true)['categories']==='18','Manual authentication evidence');
 ae_ok(Evidence::classify('Abusive automated web crawling observed',true)['categories']==='19','Manual crawling evidence');
 ae_ok(Evidence::incident('8.8.8.8',time()-30*86400,'hit:1','SQL injection attack')===null,'Expiry boundary cannot resurrect incidents');

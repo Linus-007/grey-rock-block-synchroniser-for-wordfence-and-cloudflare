@@ -5,7 +5,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.17
+Stable tag: 1.3.18
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -510,6 +510,13 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.3.18 =
+* Fixed AbuseIPDB reporting for Wordfence Known Malicious User-Agents detections.
+* Improved duplicate incident reconciliation to operate independently of API dispatch availability.
+* Improved reporting status visibility in the synchronisation and audit interfaces.
+* Moved optional AbuseIPDB settings below the primary plugin settings.
+* Added regression coverage for malicious-user-agent classification and duplicate reporting.
 
 = 1.3.17 =
 * Added optional outbound AbuseIPDB reporting after confirmed Cloudflare membership, durable incident deduplication, conservative evidence classification and daily bulk submission.

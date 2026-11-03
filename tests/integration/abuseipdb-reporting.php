@@ -70,6 +70,38 @@ $audit = AuditLog::get_logs(20,0,['ip'=>'8.8.1.1']);
 ar_ok(count($audit) === 1 && $audit[0]['event_count'] === 2 && str_starts_with(Reporter::reported($audit[0],true),'Yes (1'), 'Audit aggregation intact and shows linked incident count');
 ar_submit($entry,$options); Reporter::daily();
 ar_ok(ar_calls() === 1, 'Persistent same-incident deduplication');
+
+// A second Wordfence hit in the same burst is not a second API report.
+$repeat = ar_entry('8.8.1.1', 'SQL injection attack', 5);
+ar_submit($repeat, $options);
+ar_ok(
+  ar_status($repeat['reporting'][0]['incident']) === 'duplicate'
+  && ar_calls() === 1,
+  'Accepted same-IP same-category burst cannot generate duplicate report'
+);
+
+// The production defect: duplicate reconciliation must work
+// before Cloudflare confirmation or API dispatch can proceed.
+$wpdb->update(
+  $wpdb->base_prefix . Reporter::TABLE,
+  ['status' => 'pending'],
+  ['incident' => $repeat['reporting'][0]['incident']]
+);
+
+$GLOBALS['gr_abuse_cf_failure'] = true;
+try {
+  Reporter::drain($options, false);
+} finally {
+  $GLOBALS['gr_abuse_cf_failure'] = false;
+}
+
+ar_ok(
+  ar_status($repeat['reporting'][0]['incident']) === 'duplicate'
+  && ar_calls() === 1,
+  'Pending duplicate reconciles without Cloudflare availability or API replay'
+);
+
+
 if (is_multisite()) {
   $other=wp_insert_site(['domain'=>'abuse-shared.test','path'=>'/']);
   switch_to_blog((int)$other);

@@ -36,7 +36,11 @@ final class Reporter {
     $work = self::$deferred;
     self::$deferred = [];
     foreach ($work as $args) {
-      try { self::confirmed(...$args); } catch (\Throwable) {}
+      try {
+        self::confirmed(...$args);
+      } catch (\Throwable $error) {
+        error_log('Grey Rock AbuseIPDB deferred failure: ' . get_class($error));
+      }
     }
   }
 
@@ -121,9 +125,9 @@ final class Reporter {
         self::enqueue($incident, $options, self::destination($options, $list_id), $entry);
       }
       self::drain($options, false, $client);
-    } catch (\Throwable) {
-      // Reporting failure must never alter Cloudflare success, ownership,
-      // recovery or the synchronizer's error state. Never log provider bodies.
+    } catch (\Throwable $error) {
+      // Preserve Cloudflare success without exposing credentials or API bodies.
+      error_log('Grey Rock AbuseIPDB reporting failure: ' . get_class($error));
     }
   }
 
@@ -203,9 +207,50 @@ final class Reporter {
   public static function reported(array $row, bool $audit): string {
     global $wpdb;
     [$reports, $links] = self::tables();
-    $count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$links} l INNER JOIN {$reports} r ON r.incident=l.incident WHERE l.association=%s AND r.status='accepted'", self::association($row, $audit)));
-    if (($wpdb->last_error ?? '') !== '') { throw new \RuntimeException('Reporting receipts unavailable.'); }
-    return (int) $count > 0 ? sprintf('Yes (%d incident%s)', (int) $count, (int) $count === 1 ? '' : 's') : 'No';
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+      "SELECT r.status, COUNT(*) AS total
+       FROM {$links} l
+       INNER JOIN {$reports} r ON r.incident = l.incident
+       WHERE l.association = %s
+       GROUP BY r.status",
+      self::association($row, $audit)
+    ), ARRAY_A);
+
+    if ($wpdb->last_error !== '') {
+      throw new \RuntimeException('Reporting receipts unavailable.');
+    }
+
+    $counts = [];
+    foreach ($rows as $result) {
+      $counts[(string) $result['status']] = (int) $result['total'];
+    }
+
+    if (!empty($counts['accepted'])) {
+      $count = $counts['accepted'];
+      return sprintf(
+        'Yes (%d incident%s)',
+        $count,
+        $count === 1 ? '' : 's'
+      );
+    }
+
+    if (!empty($counts['duplicate'])) {
+      return 'Duplicate (covered by accepted report)';
+    }
+
+    foreach ([
+      'pending' => 'Pending',
+      'uncertain' => 'Uncertain',
+      'rejected' => 'Rejected',
+      'expired' => 'Expired'
+    ] as $status => $label) {
+      if (!empty($counts[$status])) {
+        return $label;
+      }
+    }
+
+    return 'No reporting incident';
   }
 
   public static function daily(): void {
@@ -296,8 +341,52 @@ final class Reporter {
     return [$confirmed, $clients];
   }
 
+  /**
+   * Reconcile durable accepted reports before any dispatch decision.
+   * This operation makes no external API requests.
+   */
+  private static function reconcile_duplicates(array $options): void {
+    global $wpdb;
+    [$reports] = self::tables();
+
+    AtomicFence::run(static function () use ($reports, $options): void {
+      global $wpdb;
+
+      $updated = $wpdb->query($wpdb->prepare(
+        "UPDATE {$reports} AS p
+         INNER JOIN {$reports} AS a
+           ON a.api_scope = p.api_scope
+          AND a.network_id = p.network_id
+          AND a.destination = p.destination
+          AND a.configuration = p.configuration
+          AND a.ip = p.ip
+          AND a.categories = p.categories
+          AND a.status = 'accepted'
+          AND a.incident <> p.incident
+          AND ABS(
+            CAST(a.evidence_at AS SIGNED) -
+            CAST(p.evidence_at AS SIGNED)
+          ) <= 3600
+         SET p.status = 'duplicate'
+         WHERE p.status = 'pending'
+           AND p.api_scope = %s
+           AND p.network_id = %d",
+        self::scope($options),
+        get_current_network_id()
+      ));
+
+      if ($updated === false || $wpdb->last_error !== '') {
+        throw new \RuntimeException(
+          'AbuseIPDB duplicate reconciliation failed.'
+        );
+      }
+    }, [$reports]);
+  }
+
   public static function drain(array $options, bool $daily, ?Client $seed = null): void {
     if (empty($options['abuseipdb_enabled']) || empty($options['abuseipdb_api_key'])) { return; }
+    // Reconcile accepted incidents independently of API availability.
+    self::reconcile_duplicates($options);
     if (($options['abuseipdb_mode'] ?? '') === 'bulk' && !$daily) { return; }
     [$allowed, $clients] = self::confirmations($options, $seed);
     if ($allowed === []) { return; }

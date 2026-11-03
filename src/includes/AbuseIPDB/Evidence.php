@@ -13,7 +13,9 @@ final class Evidence {
     if (str_contains($reason, '?')) { return null; }
     if (preg_match('~https?://|[/\\\\@]|\b(?:not|no|non|unknown|unconfirmed|unverified|uncertain|unspecified|possible|possibly|potential|potentially|suspect|suspected|suspicious|maybe|could|might|may|country|geographic|404)\b~i', $reason)) { return null; }
     $category = null;
-    if (preg_match("/^Exceeded the maximum number of login failures which is: [1-9][0-9]*\. The last username they tried to sign in with was: '[^']*'$/D", $reason)) {
+    if (!$manual && preg_match('/\bKnown Malicious User.Agents\b/i', $reason)) {
+      $category = 19;
+    } elseif (preg_match("/^Exceeded the maximum number of login failures which is: [1-9][0-9]*\. The last username they tried to sign in with was: '[^']*'$/D", $reason)) {
       $category = 18;
     } elseif ($reason === 'Exceeded the maximum number of requests per minute for crawlers.') {
       $category = 19;
@@ -28,7 +30,7 @@ final class Evidence {
       elseif (preg_match('/\bweb spam\b/i', $reason)) { $category = 10; }
     }
     if ($category === null) { return null; }
-    $labels = [16 => 'SQL injection', 18 => 'brute-force authentication attacks', 19 => 'abusive automated web crawling', 21 => 'web application exploitation or vulnerability probing', 10 => 'web spam', 12 => 'blog or comment spam'];
+    $labels = [16 => 'SQL injection', 18 => 'brute-force authentication attacks', 19 => 'malicious or abusive web bot activity', 21 => 'web application exploitation or vulnerability probing', 10 => 'web spam', 12 => 'blog or comment spam'];
     return ['categories' => (string) $category, 'comment' => ($manual ? 'Administrator evidence: ' : 'Wordfence block evidence: ') . $labels[$category] . '.'];
   }
 

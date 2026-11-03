@@ -83,7 +83,6 @@ final class Fields {
       self::add_configuration_source_field();
     }
 
-    self::add_reporting_fields();
     self::add_mode_field();
 
     self::add_text_field(
@@ -118,6 +117,7 @@ final class Fields {
     self::add_historical_lookback_field();
     self::add_historical_minimum_events_field();
     self::add_purge_missing_records_field();
+    self::add_reporting_fields();
   }
 
   private static function add_reporting_fields(): void {
@@ -135,7 +135,7 @@ final class Fields {
         printf('<option value="%s"%s>%s</option>', esc_attr($value), selected($options['abuseipdb_mode'] ?? 'immediate', $value, false), esc_html($label));
       }
       echo '</select>';
-      echo '<p>' . esc_html__('Only confirmed Cloudflare members with explicit Wordfence evidence qualify. SQL injection: 16; excessive login failures: 18; abusive crawler request limits: 19; explicit exploitation or vulnerability probing: 21; explicit web spam: 10; blog/comment spam: 12. Generic WAF blocks, 404s, country policies, missing and ambiguous reasons are never reported. Historical reports require the original rule description. Manual reporting defaults off and requires a meaningful attack reason. Cloudflare blocking does not require an AbuseIPDB reason.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
+      echo '<p>' . esc_html__('Only confirmed Cloudflare members with explicit Wordfence evidence qualify. SQL injection: 16; excessive login failures: 18; malicious user-agents and abusive crawlers: 19; explicit exploitation or vulnerability probing: 21; explicit web spam: 10; blog/comment spam: 12. Generic WAF blocks, 404s, country policies, missing and ambiguous reasons are never reported. Historical reports require the original rule description. Manual reporting defaults off and requires a meaningful attack reason. Cloudflare blocking does not require an AbuseIPDB reason.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
       echo '<p>' . esc_html__('Only IP, category, evidence timestamp and a fixed description are sent. Pending evidence expires after 30 days. Daily bulk makes at most one attempt per key in 24 hours; up to 9,999 distinct IPs. Uncertain submissions are not automatically replayed. Changing modes does not clear deduplication. You are responsible for your API allowance.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') . '</p>';
       if (!$disabled) {
         foreach ([false => 'Individual', true => 'Bulk'] as $bulk => $label) {
