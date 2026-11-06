@@ -252,6 +252,9 @@ final class Config {
    */
   public static function update_network_options(array $input): bool {
     $existing = self::get_network_options();
+    if (empty($input['cloudflare_api_token'])) {
+      $input['cloudflare_api_token'] = $existing['cloudflare_api_token'] ?? '';
+    }
     if (empty($input['abuseipdb_api_key'])) { $input['abuseipdb_api_key'] = $existing['abuseipdb_api_key'] ?? ''; }
     if (!empty($input['abuseipdb_clear_key'])) { $input['abuseipdb_api_key'] = ''; }
     return update_site_option(
@@ -296,6 +299,9 @@ final class Config {
       unset($base['cloudflare_api_token'], $base['abuseipdb_api_key']);
     }
 
+    if (empty($input['cloudflare_api_token'])) {
+      unset($input['cloudflare_api_token']);
+    }
     if (empty($input['abuseipdb_api_key'])) { unset($input['abuseipdb_api_key']); }
     $merged = array_merge($base, $input);
     if (!empty($input['abuseipdb_clear_key'])) { $merged['abuseipdb_api_key'] = ''; }

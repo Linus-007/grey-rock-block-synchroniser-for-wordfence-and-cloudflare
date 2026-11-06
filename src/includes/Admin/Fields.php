@@ -267,7 +267,9 @@ final class Fields {
       $label,
       static function () use ($name, $placeholder): void {
         $options = Config::get_admin_options();
-        $value = $options[$name] ?? '';
+        $value = $name === 'cloudflare_api_token'
+          ? ''
+          : ($options[$name] ?? '');
         // Disabled password inputs still expose their values in the DOM.
         // Network credentials belong only in the authorized network editor.
         if (
