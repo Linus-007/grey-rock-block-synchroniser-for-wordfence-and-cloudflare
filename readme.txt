@@ -5,7 +5,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.19
+Stable tag: 1.3.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -533,6 +533,10 @@ No.
 
 == Changelog ==
 
+= 1.3.20 =
+* Added Patchstack vulnerability disclosure reporting instructions to the plugin FAQ.
+* Documentation-only maintenance release; no changes to plugin runtime behaviour.
+
 = 1.3.19 =
 * Prevent stored Cloudflare API tokens from appearing in administration-page password fields.
 * Preserve existing Cloudflare credentials when the token field is left blank.
@@ -765,6 +769,9 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.20 =
+Documentation-only update adding Patchstack vulnerability disclosure instructions.
 
 = 1.3.19 =
 Security maintenance update: prevents Cloudflare API token disclosure in administration-page HTML while preserving existing credentials.
