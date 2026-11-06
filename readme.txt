@@ -5,7 +5,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.3.18
+Stable tag: 1.3.19
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -528,6 +528,12 @@ No.
 
 == Changelog ==
 
+= 1.3.19 =
+* Prevent stored Cloudflare API tokens from appearing in administration-page password fields.
+* Preserve existing Cloudflare credentials when the token field is left blank.
+* Maintain separate network and site credential ownership.
+* Extend credential security regression tests.
+
 = 1.3.18 =
 * Fixed AbuseIPDB reporting for Wordfence Known Malicious User-Agents detections.
 * Improved duplicate incident reconciliation to operate independently of API dispatch availability.
@@ -754,6 +760,9 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.3.19 =
+Security maintenance update: prevents Cloudflare API token disclosure in administration-page HTML while preserving existing credentials.
 
 = 1.3.16 =
 Restores Oracle MySQL compatibility and aggregates Historical Audit without deleting historical evidence.

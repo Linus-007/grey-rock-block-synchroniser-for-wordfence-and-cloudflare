@@ -2,7 +2,7 @@
 
 Grey Rock Block Synchroniser for Wordfence and Cloudflare synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.3.18-blue)
+![Version](https://img.shields.io/badge/version-1.3.19-blue)
 ![Tested with WordPress 7.1](https://img.shields.io/badge/WordPress-tested%20with%207.1-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -1099,6 +1099,12 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.3.19
+- Prevent stored Cloudflare API tokens from being populated into administration-page password fields.
+- Preserve existing Cloudflare credentials when the token field is left blank.
+- Preserve separate network and site credential ownership when replacing credentials.
+- Extend regression coverage for credential retention, replacement and multisite isolation.
 
 ### 1.3.18
 - Fixed AbuseIPDB classification of known malicious user agents.
