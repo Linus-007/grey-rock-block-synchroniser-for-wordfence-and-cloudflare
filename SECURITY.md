@@ -6,10 +6,38 @@ Security fixes are provided for the current release of Grey Rock Block Synchroni
 
 | Version | Supported |
 |---|---|
-| 1.2.x | Yes |
-| 1.1.x and earlier | No |
+| 1.3.x | Yes |
+| 1.2.x and earlier | No |
 
 Users should upgrade to the latest published release before reporting an issue that may already have been corrected.
+
+## CVE-2026-115560 — Plugin non-applicability
+
+**Assessment: Not applicable to the reviewed Grey Rock plugin code.**
+
+CVE-2026-115560 concerns PHP session handling. The documented
+plugin-specific assessment found no exploitable execution path
+through Grey Rock Block Synchroniser.
+
+The reviewed plugin code does not initiate PHP sessions, change
+PHP session serialisation handlers at runtime, or manipulate
+PHP session upload-progress functionality.
+
+Consequently, the documented exploitation conditions do not
+apply to the reviewed plugin code, and no plugin runtime impact
+has been identified.
+
+This determination does not certify the hosting PHP runtime,
+WordPress, Wordfence, other plugins or dependencies. It does
+not assert that the underlying PHP vulnerability has been patched.
+
+The existing approved exception, source fingerprints, approval
+history, mitigation requirements and unrelated security gates
+remain unchanged.
+
+The authoritative assessment and approval record are retained
+under `security/cve-2026-115560-exception.json` and
+`security/approval-history/`.
 
 ## Reporting a vulnerability
 
@@ -82,7 +110,7 @@ Examples of security issues that are in scope include:
 - authentication or authorisation bypasses;
 - unintended disclosure of security-sensitive configuration or logs.
 
-General support requests, configuration questions, compatibility issues, and feature requests should use the normal GitHub issue process.
+For general support, configuration questions, compatibility issues and feature requests, use the support forum linked from the WordPress.org plugin page: https://wordpress.org/plugins/grey-rock-block-synchroniser-for-wordfence-and-cloudflare/ GitHub Issues are not currently enabled. Suspected security vulnerabilities must use the private reporting process described above.
 
 ## Secret exposure
 

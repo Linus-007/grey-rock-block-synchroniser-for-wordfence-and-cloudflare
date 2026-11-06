@@ -52,6 +52,23 @@ Use this mode when several domains or Cloudflare zones should share the same lis
 
 **An Account IP List does not block traffic by itself.** You must create a Cloudflare Custom Rule in every zone that should use the list.
 
+### CVE-2026-115560 — Plugin non-applicability
+
+**Status: Not applicable to the reviewed Grey Rock plugin code.**
+
+The documented security assessment found no plugin execution path
+meeting the PHP session-handling conditions for CVE-2026-115560.
+Grey Rock does not initiate PHP sessions, change session
+serialisation handlers at runtime, or manipulate session
+upload-progress functionality.
+
+No plugin runtime impact has been identified. This assessment
+does not establish that the hosting PHP runtime or other
+WordPress components are unaffected.
+
+The original approval and all security controls remain unchanged.
+See [SECURITY.md](SECURITY.md) for details.
+
 ## Compatibility
 
 - Requires stable WordPress 7.0 or later.
@@ -986,10 +1003,10 @@ Incorrect because `$` is missing:
 ip.src in wordfence_hot_blocklist
 ```
 
-Incorrect because the name contains capitals and hyphens:
+Incorrect because the name does not match the configured list:
 
 ```text
-ip.src in $wordfence_hot_blocklist
+ip.src in $wrong_list_name
 ```
 
 ### Wordfence block data is unavailable

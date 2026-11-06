@@ -317,6 +317,23 @@ recent records from the current network. Historical blocked:wordfence requests
 require current IP-block authority; missing block type or expiry is not inferred
 from request counts. Throttles are not forwarded as IP blocks.
 
+= CVE-2026-115560 — Plugin non-applicability =
+
+CVE-2026-115560 has no identified impact on the reviewed Grey Rock
+plugin code. The documented PHP session-handling exploitation
+conditions are not present in the reviewed plugin execution path.
+
+The plugin does not initiate PHP sessions, change session
+serialisation handlers at runtime, or manipulate PHP session
+upload-progress functionality.
+
+This finding does not certify the hosting PHP runtime, WordPress,
+Wordfence, other plugins or dependencies. The underlying PHP
+vulnerability is not represented as patched.
+
+The existing plugin-scoped exception, approval history and
+security controls remain unchanged.
+
 == Installation ==
 
 1. Install and activate the current Wordfence release.
@@ -435,7 +452,7 @@ Yes. Account IP List mode can maintain one reusable account-level list. Each Clo
 
 = Does the plugin synchronise historical Wordfence firewall events? =
 
-Yes. It reads qualifying Wordfence WAF events recorded as `blocked:waf` within the configured lookback period.
+Yes. It reads qualifying `blocked:waf` and `blocked:wordfence` events within the configured lookback period. Historical plugin-block events require current Wordfence IP-block authority; missing block type or expiry is not inferred from event counts. Throttled requests are not forwarded as IP blocks.
 
 = What historical lookback periods are available? =
 
