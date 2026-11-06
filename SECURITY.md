@@ -43,6 +43,14 @@ under `security/cve-2026-115560-exception.json` and
 
 Do not report suspected security vulnerabilities through a public GitHub issue, discussion, pull request, or other public channel.
 
+### Patchstack vulnerability disclosure
+
+Security researchers can privately report suspected vulnerabilities through the [Patchstack Vulnerability Disclosure Program](https://patchstack.com/database/vdp/93e19a8b-539d-4806-a049-c03394124ead). Patchstack provides independent report triage and coordinates disclosure with the maintainer. Programme participation does not constitute an independent security audit or certification.
+
+GitHub Private Vulnerability Reporting remains available as an alternative private channel.
+
+### GitHub Private Vulnerability Reporting
+
 Use GitHub Private Vulnerability Reporting for this repository:
 
 1. Open the repository's **Security and quality** page.

@@ -405,6 +405,11 @@ account list or a Custom Rule.
 
 == Frequently Asked Questions ==
 
+= Where do I report security bugs found in this plugin? =
+
+Please report security bugs found in the source code of the Grey Rock Block Synchroniser for Wordfence and Cloudflare plugin through the [Patchstack Vulnerability Disclosure Program](https://patchstack.com/database/vdp/93e19a8b-539d-4806-a049-c03394124ead). The Patchstack team will assist you with verification, CVE assignment, and notify the developers of this plugin.
+
+
 = Does Grey Rock update my DDNS record? =
 
 No. The existing DDNS provider remains responsible for updating DNS.

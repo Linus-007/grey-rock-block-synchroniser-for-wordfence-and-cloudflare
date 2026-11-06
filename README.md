@@ -69,6 +69,10 @@ WordPress components are unaffected.
 The original approval and all security controls remain unchanged.
 See [SECURITY.md](SECURITY.md) for details.
 
+## Vulnerability disclosure
+
+Report suspected security vulnerabilities privately through the [Patchstack Vulnerability Disclosure Program](https://patchstack.com/database/vdp/93e19a8b-539d-4806-a049-c03394124ead) or the alternative private reporting procedure in [SECURITY.md](SECURITY.md). Do not disclose suspected vulnerabilities in public issues. Participation in this programme is not a security certification or completed independent code audit.
+
 ## Compatibility
 
 - Requires stable WordPress 7.0 or later.
