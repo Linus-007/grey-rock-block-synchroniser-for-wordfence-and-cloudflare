@@ -20,6 +20,7 @@ class HarnessTests(unittest.TestCase):
             (root / 'tests/docker').mkdir(parents=True)
             (root / 'tests/docker/compose.yml').touch()
             (root / 'dist').mkdir()
+            (root / 'readme.txt').write_text('Stable tag: 1\n')
             (root / 'dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip').touch()
             for script in [name, 'integration-harness.sh', 'stop-test-environment.sh', 'redact-test-output.py']:
                 shutil.copy2(ROOT / 'scripts' / script, root / 'scripts' / script)
