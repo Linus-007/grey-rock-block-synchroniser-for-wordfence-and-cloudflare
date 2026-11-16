@@ -295,7 +295,7 @@ compose run --rm --no-TTY cli \
 	plugin is-active wordfence
 
 compose run --rm --no-TTY cli \
-	plugin get wordfence --field=version |
+	--skip-plugins --skip-themes plugin get wordfence --field=version |
 	tee "$REPORT_DIR/wordfence-version.txt"
 
 compose run --rm --no-TTY cli \
@@ -342,7 +342,7 @@ if [[ "${GREY_ROCK_TASK14_FENCING:-0}" == 1 ]]; then
 fi
 
 compose run --rm --no-TTY cli \
-	plugin get "$PLUGIN_SLUG" --field=version |
+	--skip-plugins --skip-themes plugin get "$PLUGIN_SLUG" --field=version |
 	tee "$REPORT_DIR/greyrock-version.txt"
 
 echo
@@ -441,6 +441,22 @@ if [[ "$php_version" != "$EXPECTED_PHP_VERSION" ]]; then
 		"$EXPECTED_PHP_VERSION" \
 		"$php_version" >&2
 	exit 1
+fi
+
+expected_greyrock_version="$(
+    awk '/^Stable tag: / { print $3; exit }' "$REPO_ROOT/readme.txt"
+)"
+
+if [[ -z "$expected_greyrock_version" ]]; then
+    echo "ERROR: Grey Rock stable version unavailable." >&2
+    exit 1
+fi
+
+if [[ "$plugin_version" != "$expected_greyrock_version" ]]; then
+    echo "ERROR: Grey Rock plugin version mismatch." >&2
+    printf "Expected: %s\nActual:   %s\n" \
+        "$expected_greyrock_version" "$plugin_version" >&2
+    exit 1
 fi
 
 if [[ "$wordfence_version" != "$EXPECTED_WORDFENCE_VERSION" ]]; then
